@@ -6,16 +6,18 @@ using Rhino.DocObjects;
 using Rhino.Geometry;
 using Rhino.Input;
 using Rhino.Input.Custom;
+using Rhino.UI;
 
 namespace AutoLineWeight
 {
     public class GenericMake2D : Command
     {
-        private RhinoViewport currentViewport;        
-        public GenericMake2D(RhinoViewport viewport)
+        private RhinoViewport currentViewport;
+        private ObjRef[] toMake2D;
+        public GenericMake2D(ObjRef[] objRefs)
         {
             Instance = this;
-            currentViewport = viewport;
+            toMake2D = objRefs;
             this.RunCommand(RhinoDoc.ActiveDoc, RunMode.Interactive);
         }
 
@@ -26,32 +28,52 @@ namespace AutoLineWeight
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
-            HiddenLineDrawingParameters genericDrawingParams = new HiddenLineDrawingParameters();
-            genericDrawingParams.SetViewport(currentViewport);
-            genericDrawingParams.IncludeHiddenCurves = false;
-            genericDrawingParams.AbsoluteTolerance = RhinoDoc.ActiveDoc.ModelAbsoluteTolerance;
+            
+            return Result.Success;
+        }
 
+        private Result Make2D (RhinoDoc doc, RunMode mode, ObjRef[] objRefs)
+        {
             RhinoDoc activeDoc = RhinoDoc.ActiveDoc;
 
-            // Set up the object selection options
-            GetObject getObjectOptions = new GetObject();
-            getObjectOptions.GeometryFilter = ObjectType.Surface | ObjectType.PolysrfFilter;
-            getObjectOptions.SubObjectSelect = true;
+            HiddenLineDrawingParameters make2DParams = new HiddenLineDrawingParameters();
+            make2DParams.SetViewport(currentViewport);
+            make2DParams.IncludeHiddenCurves = false;
+            make2DParams.IncludeTangentEdges = false;
+            make2DParams.AbsoluteTolerance = RhinoDoc.ActiveDoc.ModelAbsoluteTolerance;
 
-            // Prompt the user to select a polysurface
-            RhinoApp.WriteLine("Please select geometry for the weighted make2d.");
-            GetResult getResult = getObjectOptions.Get();
-
-            // Check if the user made a selection
-            if (getResult == GetResult.Object)
+            if (currentViewport == null)
             {
-                // Get the selected object
-                RhinoObject selectedObject = getObjectOptions.Object(0).Object();
+                return Result.Failure;
+            }
 
-                if (selectedObject != null && selectedObject.Geometry is Brep brep)
+            foreach (ObjRef objRef in objRefs)
+            {
+                RhinoObject obj = objRef?.Object();
+                if (obj != null) { make2DParams.AddGeometry(obj.Geometry, Transform.Identity, obj.Id); }
+            }
+
+            HiddenLineDrawing make2D = HiddenLineDrawing.Compute(make2DParams, true);
+
+            if (make2D != null)
+            {
+                var flatten = Transform.PlanarProjection(Plane.WorldXY);
+                BoundingBox page_box = make2D.BoundingBox(true);
+                var delta_2d = new Vector2d(0, 0);
+                delta_2d = delta_2d - new Vector2d(page_box.Min.X, page_box.Min.Y);
+                var delta_3d = Transform.Translation(new Vector3d(delta_2d.X, delta_2d.Y, 0.0));
+                flatten = delta_3d * flatten;
+
+                foreach (var make2DCurve in make2D.Segments)
                 {
-                    // Do something with the selected polysurface (Brep)
-                    RhinoApp.WriteLine("Selected Polysurface: " + brep.ToString());
+                    if (make2DCurve?.ParentCurve == null || make2DCurve.ParentCurve.SilhouetteType == SilhouetteType.None)
+                        continue;
+
+                    var crv = make2DCurve.CurveGeometry.DuplicateCurve();
+                    if (crv != null)
+                    {
+                        crv.Transform(flatten);
+                    }
                 }
             }
 
