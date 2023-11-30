@@ -28,8 +28,8 @@ namespace AutoLineWeight
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
             // Aquires current viewport
-            RhinoViewport CurrentViewport;
-            CurrentViewport = RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport;
+            RhinoViewport currentViewport;
+            currentViewport = RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport;
             RhinoApp.WriteLine("Weighted Make2D running!");
 
             ObjRef[] objRefs = UserSelObj(doc, mode);
@@ -41,44 +41,8 @@ namespace AutoLineWeight
 
             RhinoApp.WriteLine("UserSelObj selected {0} objects!", objRefs.Length);
 
+            GenericMake2D make2D = new GenericMake2D(objRefs, currentViewport);
 
-
-            // TODO: start here modifying the behaviour of your command.
-            // ---
-            /*RhinoApp.WriteLine("The {0} command will add a line right now.", EnglishName);
-
-            Point3d pt0;
-            using (GetPoint getPointAction = new GetPoint())
-            {
-                getPointAction.SetCommandPrompt("Please select the start point");
-                if (getPointAction.Get() != GetResult.Point)
-                {
-                    RhinoApp.WriteLine("No start point was selected.");
-                    return getPointAction.CommandResult();
-                }
-                pt0 = getPointAction.Point();
-            }
-
-            Point3d pt1;
-            using (GetPoint getPointAction = new GetPoint())
-            {
-                getPointAction.SetCommandPrompt("Please select the end point");
-                getPointAction.SetBasePoint(pt0, true);
-                getPointAction.DynamicDraw +=
-                  (sender, e) => e.Display.DrawLine(pt0, e.CurrentPoint, System.Drawing.Color.DarkRed);
-                if (getPointAction.Get() != GetResult.Point)
-                {
-                    RhinoApp.WriteLine("No end point was selected.");
-                    return getPointAction.CommandResult();
-                }
-                pt1 = getPointAction.Point();
-            }
-
-            doc.Objects.AddLine(pt0, pt1);
-            doc.Views.Redraw();
-            RhinoApp.WriteLine("The {0} command added one line to the document.", EnglishName);*/
-
-            // ---
             return Result.Success;
         }
 
@@ -95,7 +59,11 @@ namespace AutoLineWeight
             // Initialize getobject
             GetObject getObject = new GetObject();
             // GO settings
-            getObject.GeometryFilter = ObjectType.Surface | ObjectType.PolysrfFilter;
+            getObject.GeometryFilter = 
+                ObjectType.Surface | 
+                ObjectType.PolysrfFilter | 
+                ObjectType.Brep | 
+                ObjectType.Curve;
             getObject.SubObjectSelect = true;
             getObject.SetCommandPrompt("Select geometry for the weighted make2d");
             getObject.GroupSelect = true;
@@ -125,7 +93,7 @@ namespace AutoLineWeight
             }
 
             // Deselects all VALID objects
-            // Does not work for invalid objects, in this case, curves, for instance
+            // Does not work for invalid objects, in this case, meshes, for instance
             // It does not make sense that invalid objects remain selected.
             // Is this necessary? By default, preselected objects remain selected and 
             // postselected objects are unselected. Does follow default make more sense?
