@@ -1,4 +1,26 @@
-﻿using Rhino;
+﻿/*
+------------------------------
+
+This command creates a weighted 2D representation of user-selected 3D geometry.
+It weighs the 2D lines based on formal relationships between the source geometry
+edges and its adjacent faces. If an edge only has one adjacent face, or one of
+its two adjacent faces is hidden, it is defined as an "outline". If both faces are
+present and the line is on a convex corner, it is defined as "convex". All other
+visible lines are defined as "concave". Hidden lines are also processed. Results
+are baked onto layers according to their assigned weight.
+
+------------------------------
+created 11/28/2023
+Ennead Architects
+
+Chloe Xu
+chloe.xu@ennead.com
+edited:11/30/2023
+
+------------------------------
+*/
+
+using Rhino;
 using Rhino.Commands;
 using Rhino.Display;
 using Rhino.DocObjects;
@@ -12,10 +34,13 @@ namespace AutoLineWeight
 {
     public class WeightedMake2D : Command
     {
+        /// <summary>
+        /// creates a weighted 2D representation of user-selected 3D geometry based
+        /// on formal relationships between user-selected source geometry and its
+        /// adjacent faces.
+        /// </summary>
         public WeightedMake2D()
         {
-            // Rhino only creates one instance of each command class defined in a
-            // plug-in, so it is safe to store a refence in a static property.
             Instance = this;
         }
 
@@ -30,89 +55,162 @@ namespace AutoLineWeight
             // Aquires current viewport
             RhinoViewport currentViewport;
             currentViewport = RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport;
-            RhinoApp.WriteLine("Weighted Make2D running!");
 
-            ObjRef[] objRefs = UserSelObj(doc, mode);
+            UserSelectGeometry selectObjs = new UserSelectGeometry();
+            ObjRef[] objRefs = selectObjs.GetUserSelection();
 
             if (objRefs == null)
             {
                 return Result.Cancel;
             }
 
-            RhinoApp.WriteLine("UserSelObj selected {0} objects!", objRefs.Length);
+            GenericMake2D createMake2D = new GenericMake2D(objRefs, currentViewport);
+            HiddenLineDrawing make2D = createMake2D.GetMake2D();
+            
+            if (make2D == null)
+            {
+                return Result.Failure;
+            }
 
-            GenericMake2D make2D = new GenericMake2D(objRefs, currentViewport);
+            SortMake2D(doc, make2D);
+            doc.Views.Redraw();
+
+            RhinoApp.WriteLine("WeightedMake2D was Successful!");
+            RhinoApp.WriteLine("Objects that remain selected were not processed.");
 
             return Result.Success;
         }
-
+        
         /// <summary>
-        /// Asks the user to select objects for the generic make2D. This method accepts both
-        /// preselected and postselected geometry, deselecting both after processing. Invalid
-        /// geometry remains selected.
+        /// Method used to sort HiddenLineDrawing curves based on the formal relationships 
+        /// between their source edges and their adjacent faces. Creates layers for the
+        /// sorted curves if they don't already exist.
         /// </summary>
-        /// <returns> An array of user-selected objects including surfaces and polysurfaces </returns>
-        private ObjRef[] UserSelObj(RhinoDoc doc, RunMode mode)
+        private Result SortMake2D (RhinoDoc doc, HiddenLineDrawing make2D)
         {
-            // POTENTIAL ISSUE: the result of GetObject is not returned to RunCommand.
+            //Check existance of layers
+            Layer drawingLayer = doc.Layers.FindName("Weighted_Make2D");
 
-            // Initialize getobject
-            GetObject getObject = new GetObject();
-            // GO settings
-            getObject.GeometryFilter = 
-                ObjectType.Surface | 
-                ObjectType.PolysrfFilter | 
-                ObjectType.Brep | 
-                ObjectType.Curve;
-            getObject.SubObjectSelect = true;
-            getObject.SetCommandPrompt("Select geometry for the weighted make2d");
-            getObject.GroupSelect = true;
-            getObject.EnableClearObjectsOnEntry(false);
-            getObject.EnableUnselectObjectsOnExit(true);
-            getObject.DeselectAllBeforePostSelect = false;
-
-            bool hasPreselect = false;
-
-            // For loop runs once when there are no preselected geometry, twice when there is
-            // Ensures that both preselection and postselection
-            for (; ; )
+            if (drawingLayer == null)
             {
-                GetResult res = getObject.GetMultiple(1, 0); // This does not clear when called again?
+                String[] level1Lyrs = { "Weighted_Visible", "Weighted_Hidden" };
+                String[] level2Lyrs = { "Outline", "Convex", "Concave" };
 
-                // Case: User did not select an object
-                if (res != GetResult.Object) { return null; }
+                // Create parent layer for entire drawing
+                drawingLayer = new Layer();
+                drawingLayer.Name = "Weighted_Make2D";
+                int dwgLyrIdx = doc.Layers.Add(drawingLayer);
+                drawingLayer = doc.Layers.FindName("Weighted_Make2D");
 
-                if (getObject.ObjectsWerePreselected)
+                // Create sublayer for visible and hidden curves
+                foreach (String lyrName in level1Lyrs)
                 {
-                    hasPreselect = true;
-                    getObject.EnablePreSelect(false, true);
+                    Layer childLyr = new Layer();
+                    childLyr.ParentLayerId = drawingLayer.Id;
+                    childLyr.Name = lyrName;
+                    int childLyrIdx = doc.Layers.Add(childLyr);
+                }
+
+                // Create sublayers under visible curves for weights representing
+                // formal relationship.
+                Layer visibleLyr = doc.Layers.FindName("Weighted_Visible");
+                int numLyrs = level2Lyrs.Length;
+                for (int i = 0; i < numLyrs; i++)
+                {
+                    String lyrName = level2Lyrs[i];
+                    Layer childLyr = new Layer();
+                    childLyr.ParentLayerId = visibleLyr.Id;
+                    childLyr.Name = lyrName;
+
+                    // Customizes layer display based on weights.
+                    double x = 1 / numLyrs;
+                    double y = 0.3 / numLyrs;
+                    double k = 0.8 / numLyrs;
+                    childLyr.Color = new ColorCMYK(1 - i * x, 0.3 - i * y, 0, k * i);
+                    childLyr.PlotColor = childLyr.Color;
+                    childLyr.PlotWeight = 0.1 * Math.Pow((numLyrs - i), 1.5);
+                    int childLyrIdx = doc.Layers.Add(childLyr);
+                }
+
+                Layer hiddenLyr = doc.Layers.FindName("Weighted_Hidden");
+                hiddenLyr.Color = new ColorCMYK(0, 0, 0, 0.3);
+            }
+
+            // finds the layer indexes only once per run.
+            int outlineIdx = doc.Layers.FindName("Outline").Index;
+            int convexIdx = doc.Layers.FindName("Convex").Index;
+            int concaveIdx = doc.Layers.FindName("Concave").Index;
+            int hiddenIdx = doc.Layers.FindName("Weighted_Hidden").Index;
+
+            // Sorts curves into layers
+            foreach (var make2DCurve in make2D.Segments)
+            {
+                // Check for parent curve. Discard if not found.
+                if (make2DCurve?.ParentCurve == null || make2DCurve.ParentCurve.SilhouetteType == SilhouetteType.None)
                     continue;
-                }
 
-                break;
-            }
+                var crv = make2DCurve.CurveGeometry.DuplicateCurve();
 
-            // Deselects all VALID objects
-            // Does not work for invalid objects, in this case, meshes, for instance
-            // It does not make sense that invalid objects remain selected.
-            // Is this necessary? By default, preselected objects remain selected and 
-            // postselected objects are unselected. Does follow default make more sense?
-            if (hasPreselect)
-            {
-                for (int i = 0; i < getObject.ObjectCount; i++)
+                // Processes visible curves
+                if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Visible)
                 {
-                    RhinoObject obj = getObject.Object(i).Object();
-                    if (null != obj)
-                        obj.Select(false);
+                    // find midpoint, if an edge is broken up into multiple segments in the make2D, each segment
+                    // is weighed individually.
+                    Point3d start = crv.PointAtStart;
+                    Point3d end = crv.PointAtEnd;
+                    Point3d mid = start + (start - end) / 2;
+
+                    // find source object
+                    ComponentIndex ci = make2DCurve.ParentCurve.SourceObjectComponentIndex;
+                    HiddenLineDrawingObject source = make2DCurve.ParentCurve.SourceObject;
+
+                    // find source edge
+                    ObjRef sourceSubObj = new ObjRef(doc, (Guid)source.Tag, ci);
+                    BrepEdge sourceEdge = sourceSubObj.Edge();
+
+                    // initialize concavity of segment
+                    Concavity crvMidConcavity = Concavity.None;
+
+                    // find concavity of original edge at segment midpoint
+                    if (sourceEdge != null)
+                    {
+                        double sourcePt;
+                        sourceEdge.ClosestPoint(mid, out sourcePt);
+                        crvMidConcavity = sourceEdge.ConcavityAt(sourcePt, RhinoDoc.ActiveDoc.ModelAbsoluteTolerance);
+                    }
+
+                    // silhouette type determines of the segment is an outline
+                    SilhouetteType silType = make2DCurve.ParentCurve.SilhouetteType;
+
+                    // sort segments into layers based on outline and concavity
+                    var attribs = new ObjectAttributes();
+                    attribs.SetUserString("SilType", silType.ToString());
+                    if (silType == SilhouetteType.Boundary || silType == SilhouetteType.Crease)
+                    {
+                        attribs.LayerIndex = outlineIdx;
+                    }
+                    else if (crvMidConcavity == Concavity.Convex)
+                    {
+                        attribs.LayerIndex = convexIdx;
+                    }
+                    else
+                    {
+                        attribs.LayerIndex = concaveIdx;
+                    }
+
+                    // add segments to file
+                    doc.Objects.AddCurve(crv, attribs);
                 }
-                doc.Views.Redraw();
+                // process hidden curves: add them to the hidden layer
+                else if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Hidden)
+                {
+                    var attribs = new ObjectAttributes();
+                    attribs.LayerIndex = hiddenIdx;
+                    doc.Objects.AddCurve(crv, attribs);
+                }
             }
-
-            RhinoApp.WriteLine("A total of {0} objects were selected.", getObject.ObjectCount);
-            // Turn the remain selected problem into a feature?
-            RhinoApp.WriteLine("Objects that remain selected were not processed.");
-
-            return getObject.Objects();
+            return Result.Success;
         }
+
     }
 }
