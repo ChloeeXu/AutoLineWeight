@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Rhino;
 using Rhino.Commands;
 using Rhino.Display;
@@ -59,12 +60,52 @@ namespace AutoLineWeight
 
             if (make2D != null)
             {
-                //var flatten = Transform.PlanarProjection(Plane.WorldXY);
-                //BoundingBox page_box = make2D.BoundingBox(true);
-                //var delta_2d = new Vector2d(0, 0);
-                //delta_2d = delta_2d - new Vector2d(page_box.Min.X, page_box.Min.Y);
-                //var delta_3d = Transform.Translation(new Vector3d(delta_2d.X, delta_2d.Y, 0.0));
-                //flatten = delta_3d * flatten;
+                // Creates layers to store objects if they don't yet exist.
+                Layer drawingLayer = doc.Layers.FindName("Weighted_Make2D");
+                
+                if (drawingLayer == null)
+                {
+                    String[] level1Lyrs = { "Weighted_Visible", "Weighted_Hidden" };
+                    String[] level2Lyrs = { "Outline", "Convex", "Concave" };
+                    drawingLayer = new Layer();
+                    drawingLayer.Name = "Weighted_Make2D";
+                    int dwgLyrIdx = doc.Layers.Add(drawingLayer);
+                    drawingLayer = doc.Layers.FindName("Weighted_Make2D");
+
+                    foreach (String lyrName in level1Lyrs)
+                    {
+                        Layer childLyr = new Layer();
+                        childLyr.ParentLayerId = drawingLayer.Id;
+                        childLyr.Name = lyrName;
+                        int childLyrIdx = doc.Layers.Add(childLyr);
+                    }
+
+                    Layer visibleLyr = doc.Layers.FindName("Weighted_Visible");
+                    int numLyrs = level2Lyrs.Length;
+                    for (int i = 0; i < numLyrs; i++)
+                    {
+                        String lyrName = level2Lyrs[i];
+                        Layer childLyr = new Layer();
+                        childLyr.ParentLayerId = visibleLyr.Id;
+                        childLyr.Name = lyrName;
+                        double x = 1 / numLyrs;
+                        double y = 0.3/numLyrs;
+                        double k = 0.8 / numLyrs;
+                        childLyr.Color = new ColorCMYK(1 - i * x, 0.3 - i * y, 0, k * i);
+                        childLyr.PlotColor = childLyr.Color;
+                        childLyr.PlotWeight = 0.1 * Math.Pow((numLyrs - i), 1.5);
+                        int childLyrIdx = doc.Layers.Add(childLyr);
+                    }
+
+                    Layer hiddenLyr = doc.Layers.FindName("Weighted_Hidden");
+                    hiddenLyr.Color = new ColorCMYK(0, 0, 0, 0.3);
+                }
+
+                // finds the layer indexes only once per run.
+                int outlineIdx = doc.Layers.FindName("Outline").Index;
+                int convexIdx = doc.Layers.FindName("Convex").Index;
+                int concaveIdx = doc.Layers.FindName("Concave").Index;
+                int hiddenIdx = doc.Layers.FindName("Weighted_Hidden").Index;
 
                 foreach (var make2DCurve in make2D.Segments)
                 {
@@ -72,41 +113,54 @@ namespace AutoLineWeight
                         continue;
 
                     var crv = make2DCurve.CurveGeometry.DuplicateCurve();
-                    Point3d start = crv.PointAtStart;
-                    Point3d end = crv.PointAtEnd;
-                    Point3d mid = start + (start - end) / 2;
-
-                    ComponentIndex ci = make2DCurve.ParentCurve.SourceObjectComponentIndex;
-                    HiddenLineDrawingObject source = make2DCurve.ParentCurve.SourceObject;
-
-                    ObjRef sourceSubObj = new ObjRef(doc, (Guid)source.Tag, ci);
-                    BrepEdge sourceEdge = sourceSubObj.Edge();
-
-                    string subObjType = "other";
-
-                    if (sourceEdge != null)
-                    {
-                        double sourcePt;
-                        sourceEdge.ClosestPoint(mid, out sourcePt);
-                        Concavity concavityAt = sourceEdge.ConcavityAt(sourcePt, RhinoDoc.ActiveDoc.ModelAbsoluteTolerance);
-                        switch (concavityAt)
-                        {
-                            case Concavity.Convex:
-                                subObjType = "convex";
-                                break;
-                            case Concavity.Concave:
-                                subObjType = "concave";
-                                break;
-                        }
-                    }
-
-                    var attribs = new ObjectAttributes { Name = "V" };
-                    attribs.SetUserString("Silhouette type: ", make2DCurve.ParentCurve.SilhouetteType.ToString());
-                    attribs.SetUserString("Source subobject type", subObjType);
 
                     if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Visible)
                     {
-                        //crv.Transform(flatten);
+                        Point3d start = crv.PointAtStart;
+                        Point3d end = crv.PointAtEnd;
+                        Point3d mid = start + (start - end) / 2;
+
+                        ComponentIndex ci = make2DCurve.ParentCurve.SourceObjectComponentIndex;
+                        HiddenLineDrawingObject source = make2DCurve.ParentCurve.SourceObject;
+
+                        ObjRef sourceSubObj = new ObjRef(doc, (Guid)source.Tag, ci);
+                        BrepEdge sourceEdge = sourceSubObj.Edge();
+
+                        string subObjType = "other";
+                        Concavity crvMidConcavity = Concavity.None;
+
+                        if (sourceEdge != null)
+                        {
+                            double sourcePt;
+                            sourceEdge.ClosestPoint(mid, out sourcePt);
+                            crvMidConcavity = sourceEdge.ConcavityAt(sourcePt, RhinoDoc.ActiveDoc.ModelAbsoluteTolerance);
+                        }
+
+                        SilhouetteType silType = make2DCurve.ParentCurve.SilhouetteType;
+
+                        var attribs = new ObjectAttributes();
+                        attribs.SetUserString("Silhouette type: ", silType.ToString());
+                        attribs.SetUserString("Source subobject type", subObjType);
+
+                        if (silType == SilhouetteType.Boundary || silType == SilhouetteType.Crease)
+                        {
+                            attribs.LayerIndex = outlineIdx;
+                        } 
+                        else if (crvMidConcavity == Concavity.Convex)
+                        {
+                            attribs.LayerIndex = convexIdx;
+                        }
+                        else
+                        {
+                            attribs.LayerIndex = concaveIdx;
+                        }
+
+                        doc.Objects.AddCurve(crv, attribs);
+                    }
+                    else if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Hidden)
+                    {
+                        var attribs = new ObjectAttributes();
+                        attribs.LayerIndex = hiddenIdx;
                         doc.Objects.AddCurve(crv, attribs);
                     }
                 }
