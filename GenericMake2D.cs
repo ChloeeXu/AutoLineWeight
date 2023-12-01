@@ -74,6 +74,17 @@ namespace AutoLineWeight
                 if (obj != null) { make2DParams.AddGeometry(obj.Geometry, Transform.Identity, obj.Id); }
             }
 
+            ClippingPlaneObject[] activeClippingPlanes = doc.Objects.FindClippingPlanesForViewport(this.currentViewport);
+            if (activeClippingPlanes != null)
+            {
+                foreach (ClippingPlaneObject clippingPlane in activeClippingPlanes)
+                {
+                    Plane plane = clippingPlane.ClippingPlaneGeometry.Plane;
+                    plane.Flip();
+                    make2DParams.AddClippingPlane(plane);
+                }
+            }
+
             HiddenLineDrawing make2D = HiddenLineDrawing.Compute(make2DParams, true);
             this.resultMake2D = make2D;
             return Result.Success;

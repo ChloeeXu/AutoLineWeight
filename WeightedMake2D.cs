@@ -94,7 +94,7 @@ namespace AutoLineWeight
             if (drawingLayer == null)
             {
                 String[] level1Lyrs = { "Weighted_Visible", "Weighted_Hidden" };
-                String[] level2Lyrs = { "Outline", "Convex", "Concave" };
+                String[] level2Lyrs = { "Cut", "Outline", "Convex", "Concave" };
 
                 // Create parent layer for entire drawing
                 drawingLayer = new Layer();
@@ -128,7 +128,7 @@ namespace AutoLineWeight
                     double k = 0.8 / numLyrs;
                     childLyr.Color = new ColorCMYK(1 - i * x, 0.3 - i * y, 0, k * i);
                     childLyr.PlotColor = childLyr.Color;
-                    childLyr.PlotWeight = 0.1 * Math.Pow((numLyrs - i), 1.5);
+                    childLyr.PlotWeight = 0.15 * Math.Pow((numLyrs - i), 1.5);
                     int childLyrIdx = doc.Layers.Add(childLyr);
                 }
 
@@ -137,6 +137,7 @@ namespace AutoLineWeight
             }
 
             // finds the layer indexes only once per run.
+            int clipIdx = doc.Layers.FindName("Cut").Index;
             int outlineIdx = doc.Layers.FindName("Outline").Index;
             int convexIdx = doc.Layers.FindName("Convex").Index;
             int concaveIdx = doc.Layers.FindName("Concave").Index;
@@ -185,7 +186,11 @@ namespace AutoLineWeight
                     // sort segments into layers based on outline and concavity
                     var attribs = new ObjectAttributes();
                     attribs.SetUserString("SilType", silType.ToString());
-                    if (silType == SilhouetteType.Boundary || silType == SilhouetteType.Crease)
+                    if (silType == SilhouetteType.SectionCut)
+                    {
+                        attribs.LayerIndex = clipIdx;
+                    }
+                    else if (silType == SilhouetteType.Boundary || silType == SilhouetteType.Crease)
                     {
                         attribs.LayerIndex = outlineIdx;
                     }
@@ -208,6 +213,7 @@ namespace AutoLineWeight
                     attribs.LayerIndex = hiddenIdx;
                     doc.Objects.AddCurve(crv, attribs);
                 }
+
             }
             return Result.Success;
         }
