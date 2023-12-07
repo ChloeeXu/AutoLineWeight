@@ -24,6 +24,8 @@ using Rhino.Commands;
 using Rhino.DocObjects;
 using Rhino.Input.Custom;
 using Rhino.Input;
+using System.Diagnostics;
+using Rhino.UI;
 
 namespace AutoLineWeight
 {
@@ -62,6 +64,10 @@ namespace AutoLineWeight
             getObject.EnableClearObjectsOnEntry(false);
             getObject.EnableUnselectObjectsOnExit(true);
             getObject.DeselectAllBeforePostSelect = false;
+            getObject.EnableUnselectObjectsOnExit(true);
+
+            bool includeClipping = true;
+            bool includeHidden = false;
 
             bool hasPreselect = false;
 
@@ -72,7 +78,13 @@ namespace AutoLineWeight
                 GetResult res = getObject.GetMultiple(1, 0); // This does not clear when called again?
 
                 // Case: User did not select an object
-                if (res != GetResult.Object) { return Result.Cancel; }
+                if (res != GetResult.Object) 
+                {
+                    this.Deselect();
+                    doc.Views.Redraw();
+                    RhinoApp.WriteLine("No valid geometry was selected.");
+                    return Result.Cancel; 
+                }
 
                 if (getObject.ObjectsWerePreselected)
                 {
@@ -103,6 +115,10 @@ namespace AutoLineWeight
             RhinoApp.WriteLine("A total of {0} objects were selected.", getObject.ObjectCount);
 
             userSelection = getObject.Objects();
+
+            this.Deselect();
+            doc.Views.Redraw();
+
             return Result.Success;
         }
 
@@ -114,6 +130,29 @@ namespace AutoLineWeight
         {
             this.RunCommand(RhinoDoc.ActiveDoc, RunMode.Interactive);
             return this.userSelection;
+        }
+
+        private void Deselect() 
+        {
+            GetObject getRemaining = new GetObject();
+            getRemaining.EnablePreSelect(true, false);
+            getRemaining.EnablePostSelect(false);
+
+            GetResult rem = getRemaining.GetMultiple(1, 0); // This does not clear when called again?
+
+            // Case: User did not select an object
+            if (rem == GetResult.Object)
+            {
+                if (getRemaining.ObjectsWerePreselected)
+                {
+                    for (int i = 0; i < getRemaining.ObjectCount; i++)
+                    {
+                        RhinoObject obj = getRemaining.Object(i).Object();
+                        if (null != obj)
+                            obj.Select(false);
+                    }
+                }
+            }
         }
     }
 }

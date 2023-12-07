@@ -4,9 +4,9 @@
 This command creates a weighted 2D representation of user-selected 3D geometry.
 It weighs the 2D lines based on formal relationships between the source geometry
 edges and its adjacent faces. If an edge only has one adjacent face, or one of
-its two adjacent faces is hidden, it is defined as an "outline". If both faces are
-present and the line is on a convex corner, it is defined as "convex". All other
-visible lines are defined as "concave". Hidden lines are also processed. Results
+its two adjacent faces is hidden, it is defined as an "WT_Outline". If both faces are
+present and the line is on a convex corner, it is defined as "WT_Convex". All other
+visible lines are defined as "WT_Concave". Hidden lines are also processed. Results
 are baked onto layers according to their assigned weight.
 
 ------------------------------
@@ -29,6 +29,7 @@ using Rhino.Input;
 using Rhino.Input.Custom;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace AutoLineWeight
 {
@@ -64,6 +65,7 @@ namespace AutoLineWeight
                 return Result.Cancel;
             }
 
+            Stopwatch watch = Stopwatch.StartNew();
             GenericMake2D createMake2D = new GenericMake2D(objRefs, currentViewport);
             HiddenLineDrawing make2D = createMake2D.GetMake2D();
             
@@ -76,7 +78,9 @@ namespace AutoLineWeight
             doc.Views.Redraw();
 
             RhinoApp.WriteLine("WeightedMake2D was Successful!");
-            RhinoApp.WriteLine("Objects that remain selected were not processed.");
+            watch.Stop();
+            long elapsedMs = watch.ElapsedMilliseconds;
+            RhinoApp.WriteLine("WeightedMake2D took {0} milliseconds.", elapsedMs.ToString());
 
             return Result.Success;
         }
@@ -89,59 +93,65 @@ namespace AutoLineWeight
         private Result SortMake2D (RhinoDoc doc, HiddenLineDrawing make2D)
         {
             //Check existance of layers
-            Layer drawingLayer = doc.Layers.FindName("Weighted_Make2D");
+            Layer drawingLayer = doc.Layers.FindName("WT_Make2D");
+
+            string[] level1Lyrs = { "WT_Visible", "WT_Hidden" };
+            string[] level2Lyrs = { "WT_Cut", "WT_Outline", "WT_Convex", "WT_Concave" };
 
             if (drawingLayer == null)
             {
-                String[] level1Lyrs = { "Weighted_Visible", "Weighted_Hidden" };
-                String[] level2Lyrs = { "Cut", "Outline", "Convex", "Concave" };
-
                 // Create parent layer for entire drawing
                 drawingLayer = new Layer();
-                drawingLayer.Name = "Weighted_Make2D";
+                drawingLayer.Name = "WT_Make2D";
                 int dwgLyrIdx = doc.Layers.Add(drawingLayer);
-                drawingLayer = doc.Layers.FindName("Weighted_Make2D");
+                drawingLayer = doc.Layers.FindName("WT_Make2D");
 
                 // Create sublayer for visible and hidden curves
                 foreach (String lyrName in level1Lyrs)
                 {
-                    Layer childLyr = new Layer();
-                    childLyr.ParentLayerId = drawingLayer.Id;
-                    childLyr.Name = lyrName;
-                    int childLyrIdx = doc.Layers.Add(childLyr);
+                    if (doc.Layers.FindName(lyrName) == null)
+                    {
+                        Layer childLyr = new Layer();
+                        childLyr.ParentLayerId = drawingLayer.Id;
+                        childLyr.Name = lyrName;
+                        int childLyrIdx = doc.Layers.Add(childLyr);
+                    }
                 }
 
                 // Create sublayers under visible curves for weights representing
                 // formal relationship.
-                Layer visibleLyr = doc.Layers.FindName("Weighted_Visible");
+                Layer visibleLyr = doc.Layers.FindName("WT_Visible");
                 int numLyrs = level2Lyrs.Length;
                 for (int i = 0; i < numLyrs; i++)
                 {
                     String lyrName = level2Lyrs[i];
-                    Layer childLyr = new Layer();
-                    childLyr.ParentLayerId = visibleLyr.Id;
-                    childLyr.Name = lyrName;
+                    if (doc.Layers.FindName(lyrName) == null)
+                    {
+                        Layer childLyr = new Layer();
+                        childLyr.ParentLayerId = visibleLyr.Id;
+                        childLyr.Name = lyrName;
 
-                    // Customizes layer display based on weights.
-                    double x = 1 / numLyrs;
-                    double y = 0.3 / numLyrs;
-                    double k = 0.8 / numLyrs;
-                    childLyr.Color = new ColorCMYK(1 - i * x, 0.3 - i * y, 0, k * i);
-                    childLyr.PlotColor = childLyr.Color;
-                    childLyr.PlotWeight = 0.15 * Math.Pow((numLyrs - i), 1.5);
-                    int childLyrIdx = doc.Layers.Add(childLyr);
+                        // Customizes layer display based on weights.
+                        double x = 1 / numLyrs;
+                        double y = 0.3 / numLyrs;
+                        double k = 0.8 / numLyrs;
+                        childLyr.Color = new ColorCMYK(1 - i * x, 0.3 - i * y, 0, k * i);
+                        childLyr.PlotColor = childLyr.Color;
+                        childLyr.PlotWeight = 0.15 * Math.Pow((numLyrs - i), 1.5);
+                        int childLyrIdx = doc.Layers.Add(childLyr);
+                    }
                 }
 
-                Layer hiddenLyr = doc.Layers.FindName("Weighted_Hidden");
+                Layer hiddenLyr = doc.Layers.FindName("WT_Hidden");
                 hiddenLyr.Color = new ColorCMYK(0, 0, 0, 0.3);
             }
 
             // finds the layer indexes only once per run.
-            int clipIdx = doc.Layers.FindName("Cut").Index;
-            int outlineIdx = doc.Layers.FindName("Outline").Index;
-            int convexIdx = doc.Layers.FindName("Convex").Index;
-            int concaveIdx = doc.Layers.FindName("Concave").Index;
-            int hiddenIdx = doc.Layers.FindName("Weighted_Hidden").Index;
+            int clipIdx = doc.Layers.FindName("WT_Cut").Index;
+            int outlineIdx = doc.Layers.FindName("WT_Outline").Index;
+            int convexIdx = doc.Layers.FindName("WT_Convex").Index;
+            int concaveIdx = doc.Layers.FindName("WT_Concave").Index;
+            int hiddenIdx = doc.Layers.FindName("WT_Hidden").Index;
 
             // Sorts curves into layers
             foreach (var make2DCurve in make2D.Segments)
@@ -151,6 +161,8 @@ namespace AutoLineWeight
                     continue;
 
                 var crv = make2DCurve.CurveGeometry.DuplicateCurve();
+
+                var attribs = new ObjectAttributes();
 
                 // Processes visible curves
                 if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Visible)
@@ -184,7 +196,6 @@ namespace AutoLineWeight
                     SilhouetteType silType = make2DCurve.ParentCurve.SilhouetteType;
 
                     // sort segments into layers based on outline and concavity
-                    var attribs = new ObjectAttributes();
                     attribs.SetUserString("SilType", silType.ToString());
                     if (silType == SilhouetteType.SectionCut)
                     {
@@ -202,18 +213,19 @@ namespace AutoLineWeight
                     {
                         attribs.LayerIndex = concaveIdx;
                     }
-
-                    // add segments to file
-                    doc.Objects.AddCurve(crv, attribs);
                 }
                 // process hidden curves: add them to the hidden layer
                 else if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Hidden)
                 {
-                    var attribs = new ObjectAttributes();
                     attribs.LayerIndex = hiddenIdx;
-                    doc.Objects.AddCurve(crv, attribs);
                 }
+
+                // adds curves to document and selects them.
+                Guid crvGuid = doc.Objects.AddCurve(crv, attribs);
+                RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
+                addedCrv.Select(true);
             }
+
             return Result.Success;
         }
 
