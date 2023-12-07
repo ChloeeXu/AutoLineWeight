@@ -213,7 +213,6 @@ namespace AutoLineWeight
                     attribs.LayerIndex = hiddenIdx;
                     doc.Objects.AddCurve(crv, attribs);
                 }
-
             }
             return Result.Success;
         }
