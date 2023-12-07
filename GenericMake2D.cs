@@ -35,6 +35,8 @@ namespace AutoLineWeight
         private RhinoViewport currentViewport;
         private ObjRef[] toMake2D;
         private HiddenLineDrawing resultMake2D;
+        private bool includeClipping;
+        private bool includeHidden;
 
         /// <summary>
         /// Creates a HiddenLineDrawing of input geometry from the input
@@ -42,11 +44,13 @@ namespace AutoLineWeight
         /// </summary>
         /// <param name="objRefs"> Array of ObjRef. Objects to be processed into 2d drawing. </param>
         /// <param name="viewport"> Viewport from which to make the drawing.</param>
-        public GenericMake2D(ObjRef[] objRefs, RhinoViewport viewport)
+        public GenericMake2D(ObjRef[] objRefs, RhinoViewport viewport, bool includeClipping, bool includeHidden)
         {
             Instance = this;
             this.toMake2D = objRefs;
             this.currentViewport = viewport;
+            this.includeClipping = includeClipping;
+            this.includeHidden = includeHidden;
         }
 
         ///<summary>The only instance of the MyCommand command.</summary>
@@ -74,14 +78,19 @@ namespace AutoLineWeight
                 if (obj != null) { make2DParams.AddGeometry(obj.Geometry, Transform.Identity, obj.Id); }
             }
 
-            ClippingPlaneObject[] activeClippingPlanes = doc.Objects.FindClippingPlanesForViewport(this.currentViewport);
-            if (activeClippingPlanes != null)
+            if (!this.includeHidden) { make2DParams.IncludeHiddenCurves = false; }
+
+            if (this.includeClipping)
             {
-                foreach (ClippingPlaneObject clippingPlane in activeClippingPlanes)
+                ClippingPlaneObject[] activeClippingPlanes = doc.Objects.FindClippingPlanesForViewport(this.currentViewport);
+                if (activeClippingPlanes != null)
                 {
-                    Plane plane = clippingPlane.ClippingPlaneGeometry.Plane;
-                    plane.Flip();
-                    make2DParams.AddClippingPlane(plane);
+                    foreach (ClippingPlaneObject clippingPlane in activeClippingPlanes)
+                    {
+                        Plane plane = clippingPlane.ClippingPlaneGeometry.Plane;
+                        plane.Flip();
+                        make2DParams.AddClippingPlane(plane);
+                    }
                 }
             }
 

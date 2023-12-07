@@ -33,6 +33,8 @@ namespace AutoLineWeight
     {
         // Storage location for selection.
         Rhino.DocObjects.ObjRef[] userSelection;
+        bool includeClipping = true;
+        bool includeHidden = false;
 
         /// <summary>
         /// Aqures user selection of multiple geometry. Accepts polysurfaces
@@ -62,12 +64,14 @@ namespace AutoLineWeight
             getObject.SetCommandPrompt("Select geometry for the weighted make2d");
             getObject.GroupSelect = true;
             getObject.EnableClearObjectsOnEntry(false);
-            getObject.EnableUnselectObjectsOnExit(true);
+            getObject.EnableUnselectObjectsOnExit(false);
             getObject.DeselectAllBeforePostSelect = false;
-            getObject.EnableUnselectObjectsOnExit(true);
 
-            bool includeClipping = true;
-            bool includeHidden = false;
+            OptionToggle optIncludeClipping = new OptionToggle(includeClipping, "Disable", "Enable");
+            OptionToggle optIncludeHidden = new OptionToggle(includeHidden, "Disable", "Enable");
+
+            getObject.AddOptionToggle("Include_Clipping_Planes", ref optIncludeClipping);
+            getObject.AddOptionToggle("Include_Hidden_Lines", ref optIncludeHidden);
 
             bool hasPreselect = false;
 
@@ -78,7 +82,14 @@ namespace AutoLineWeight
                 GetResult res = getObject.GetMultiple(1, 0); // This does not clear when called again?
 
                 // Case: User did not select an object
-                if (res != GetResult.Object) 
+                if (res == GetResult.Option)
+                {
+                    this.includeClipping = optIncludeClipping.CurrentValue;
+                    this.includeHidden = optIncludeHidden.CurrentValue;
+                    continue;
+                }
+
+                else if (res != GetResult.Object) 
                 {
                     this.Deselect();
                     doc.Views.Redraw();
@@ -86,7 +97,7 @@ namespace AutoLineWeight
                     return Result.Cancel; 
                 }
 
-                if (getObject.ObjectsWerePreselected)
+                else if (getObject.ObjectsWerePreselected)
                 {
                     hasPreselect = true;
                     getObject.EnablePreSelect(false, true);
@@ -130,6 +141,16 @@ namespace AutoLineWeight
         {
             this.RunCommand(RhinoDoc.ActiveDoc, RunMode.Interactive);
             return this.userSelection;
+        }
+
+        public bool GetIncludeClipping ()
+        {
+            return this.includeClipping;
+        }
+
+        public bool GetIncludeHidden ()
+        {
+            return this.includeHidden;
         }
 
         private void Deselect() 

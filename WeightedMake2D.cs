@@ -59,6 +59,8 @@ namespace AutoLineWeight
 
             UserSelectGeometry selectObjs = new UserSelectGeometry();
             ObjRef[] objRefs = selectObjs.GetUserSelection();
+            bool includeClipping = selectObjs.GetIncludeClipping();
+            bool includeHidden = selectObjs.GetIncludeHidden();
 
             if (objRefs == null)
             {
@@ -66,7 +68,7 @@ namespace AutoLineWeight
             }
 
             Stopwatch watch = Stopwatch.StartNew();
-            GenericMake2D createMake2D = new GenericMake2D(objRefs, currentViewport);
+            GenericMake2D createMake2D = new GenericMake2D(objRefs, currentViewport, includeClipping, includeHidden);
             HiddenLineDrawing make2D = createMake2D.GetMake2D();
             
             if (make2D == null)
@@ -74,7 +76,7 @@ namespace AutoLineWeight
                 return Result.Failure;
             }
 
-            SortMake2D(doc, make2D);
+            SortMake2D(doc, make2D, includeClipping, includeHidden);
             doc.Views.Redraw();
 
             RhinoApp.WriteLine("WeightedMake2D was Successful!");
@@ -90,68 +92,51 @@ namespace AutoLineWeight
         /// between their source edges and their adjacent faces. Creates layers for the
         /// sorted curves if they don't already exist.
         /// </summary>
-        private Result SortMake2D (RhinoDoc doc, HiddenLineDrawing make2D)
+        private Result SortMake2D (RhinoDoc doc, HiddenLineDrawing make2D, bool includeClipping, bool includeHidden)
         {
             //Check existance of layers
-            Layer drawingLayer = doc.Layers.FindName("WT_Make2D");
-
-            string[] level1Lyrs = { "WT_Visible", "WT_Hidden" };
             string[] level2Lyrs = { "WT_Cut", "WT_Outline", "WT_Convex", "WT_Concave" };
 
-            if (drawingLayer == null)
+            bool exists;
+            Layer drawingLayer = FindOrCreateLyr(doc, "WT_Make2D", null, out exists);
+            Layer visibleLayer = FindOrCreateLyr(doc, "WT_Visible", drawingLayer, out exists);
+            if (includeHidden) 
+            { 
+                Layer hiddenLayer = FindOrCreateLyr(doc, "WT_Hidden", drawingLayer, out exists);
+                hiddenLayer.Color = new ColorCMYK(0, 0, 0, 0.3);
+                hiddenLayer.PlotColor = new ColorCMYK(0, 0, 0, 0.3);
+            }
+
+            int numLyrs = level2Lyrs.Length;
+            double x = 1 / numLyrs;
+            double y = 0.3 / numLyrs;
+            double k = 0.8 / numLyrs;
+            for (int i = 0; i < numLyrs; i++)
             {
-                // Create parent layer for entire drawing
-                drawingLayer = new Layer();
-                drawingLayer.Name = "WT_Make2D";
-                int dwgLyrIdx = doc.Layers.Add(drawingLayer);
-                drawingLayer = doc.Layers.FindName("WT_Make2D");
+                if (i == 0 && includeClipping == false) {  continue; }
+                String lyrName = level2Lyrs[i];
+                bool colored = false;
+                Layer childLyr = FindOrCreateLyr(doc, lyrName, visibleLayer, out colored);
 
-                // Create sublayer for visible and hidden curves
-                foreach (String lyrName in level1Lyrs)
+                if (colored == false)
                 {
-                    if (doc.Layers.FindName(lyrName) == null)
-                    {
-                        Layer childLyr = new Layer();
-                        childLyr.ParentLayerId = drawingLayer.Id;
-                        childLyr.Name = lyrName;
-                        int childLyrIdx = doc.Layers.Add(childLyr);
-                    }
+                    childLyr.Color = new ColorCMYK(1 - i * x, 0.3 - i * y, 0, k * i);
+                    childLyr.PlotColor = childLyr.Color;
+                    childLyr.PlotWeight = 0.15 * Math.Pow((numLyrs - i), 1.5);
+                    int childLyrIdx = doc.Layers.Add(childLyr);
                 }
-
-                // Create sublayers under visible curves for weights representing
-                // formal relationship.
-                Layer visibleLyr = doc.Layers.FindName("WT_Visible");
-                int numLyrs = level2Lyrs.Length;
-                for (int i = 0; i < numLyrs; i++)
-                {
-                    String lyrName = level2Lyrs[i];
-                    if (doc.Layers.FindName(lyrName) == null)
-                    {
-                        Layer childLyr = new Layer();
-                        childLyr.ParentLayerId = visibleLyr.Id;
-                        childLyr.Name = lyrName;
-
-                        // Customizes layer display based on weights.
-                        double x = 1 / numLyrs;
-                        double y = 0.3 / numLyrs;
-                        double k = 0.8 / numLyrs;
-                        childLyr.Color = new ColorCMYK(1 - i * x, 0.3 - i * y, 0, k * i);
-                        childLyr.PlotColor = childLyr.Color;
-                        childLyr.PlotWeight = 0.15 * Math.Pow((numLyrs - i), 1.5);
-                        int childLyrIdx = doc.Layers.Add(childLyr);
-                    }
-                }
-
-                Layer hiddenLyr = doc.Layers.FindName("WT_Hidden");
-                hiddenLyr.Color = new ColorCMYK(0, 0, 0, 0.3);
             }
 
             // finds the layer indexes only once per run.
-            int clipIdx = doc.Layers.FindName("WT_Cut").Index;
+
+            int clipIdx = 0;
+            int hiddenIdx = 0;
+            if (includeClipping == true) { clipIdx = doc.Layers.FindName("WT_Cut").Index; }
+            if (includeHidden) { hiddenIdx = doc.Layers.FindName("WT_Hidden").Index; }
+
             int outlineIdx = doc.Layers.FindName("WT_Outline").Index;
             int convexIdx = doc.Layers.FindName("WT_Convex").Index;
             int concaveIdx = doc.Layers.FindName("WT_Concave").Index;
-            int hiddenIdx = doc.Layers.FindName("WT_Hidden").Index;
 
             // Sorts curves into layers
             foreach (var make2DCurve in make2D.Segments)
@@ -199,6 +184,7 @@ namespace AutoLineWeight
                     attribs.SetUserString("SilType", silType.ToString());
                     if (silType == SilhouetteType.SectionCut)
                     {
+                        if (includeClipping == false) { continue; }
                         attribs.LayerIndex = clipIdx;
                     }
                     else if (silType == SilhouetteType.Boundary || silType == SilhouetteType.Crease)
@@ -217,6 +203,7 @@ namespace AutoLineWeight
                 // process hidden curves: add them to the hidden layer
                 else if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Hidden)
                 {
+                    if (includeHidden == false) { continue; }
                     attribs.LayerIndex = hiddenIdx;
                 }
 
@@ -227,6 +214,23 @@ namespace AutoLineWeight
             }
 
             return Result.Success;
+        }
+
+        private Layer FindOrCreateLyr (RhinoDoc doc, string lyrName, Layer parent, out bool exists)
+        {
+            Layer layer = doc.Layers.FindName(lyrName);
+            if (layer == null)
+            {
+                exists = false;
+                layer = new Layer();
+                layer.Name = lyrName;
+                if (parent != null) { layer.ParentLayerId = parent.Id; }
+                doc.Layers.Add(layer);
+                layer = doc.Layers.FindName(lyrName);
+            }
+            else { exists = true; }
+            
+            return layer;
         }
 
     }
