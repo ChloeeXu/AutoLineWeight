@@ -29,7 +29,7 @@ using Rhino.UI;
 
 namespace AutoLineWeight
 {
-    public class UserSelectGeometry : Command
+    public class UserSelectGeometry
     {
         // Storage location for selection.
         Rhino.DocObjects.ObjRef[] userSelection;
@@ -48,9 +48,9 @@ namespace AutoLineWeight
         ///<summary>The only instance of the MyCommand command.</summary>
         public static UserSelectGeometry Instance { get; private set; }
 
-        public override string EnglishName => "UserSelectGeometry";
+        public string EnglishName => "UserSelectGeometry";
 
-        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        protected Result RunCommand(RhinoDoc doc, RunMode mode)
         {
             // Initialize getobject
             GetObject getObject = new GetObject();

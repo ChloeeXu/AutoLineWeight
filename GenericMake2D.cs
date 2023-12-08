@@ -30,7 +30,7 @@ using Rhino.UI;
 
 namespace AutoLineWeight
 {
-    public class GenericMake2D : Command
+    public class GenericMake2D
     {
         private RhinoViewport currentViewport;
         private ObjRef[] toMake2D;
@@ -56,9 +56,9 @@ namespace AutoLineWeight
         ///<summary>The only instance of the MyCommand command.</summary>
         public static GenericMake2D Instance { get; private set; }
 
-        public override string EnglishName => "GenericMake2D";
+        public string EnglishName => "GenericMake2D";
 
-        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        protected Result RunCommand(RhinoDoc doc, RunMode mode)
         {
             HiddenLineDrawingParameters make2DParams = new HiddenLineDrawingParameters();
             make2DParams.SetViewport(this.currentViewport);
