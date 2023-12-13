@@ -29,7 +29,9 @@ using Rhino.Input;
 using Rhino.Input.Custom;
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Diagnostics;
+using System.Drawing;
 
 namespace AutoLineWeight
 {
@@ -103,8 +105,15 @@ namespace AutoLineWeight
             if (includeHidden) 
             { 
                 Layer hiddenLayer = FindOrCreateLyr(doc, "WT_Hidden", drawingLayer, out exists);
-                hiddenLayer.Color = new ColorCMYK(0, 0, 0, 0.3);
-                hiddenLayer.PlotColor = new ColorCMYK(0, 0, 0, 0.3);
+                if (exists == false)
+                {
+                    int ltIdx = doc.Linetypes.Find("Hidden");
+                    if (ltIdx >= 0)
+                    {
+                        hiddenLayer.LinetypeIndex = ltIdx;
+                    }
+                    hiddenLayer.PlotWeight = 0.1; 
+                }
             }
 
             int numLyrs = level2Lyrs.Length;
@@ -120,10 +129,7 @@ namespace AutoLineWeight
 
                 if (colored == false)
                 {
-                    childLyr.Color = new ColorCMYK(1 - i * x, 0.3 - i * y, 0, k * i);
-                    childLyr.PlotColor = childLyr.Color;
                     childLyr.PlotWeight = 0.15 * Math.Pow((numLyrs - i), 1.5);
-                    int childLyrIdx = doc.Layers.Add(childLyr);
                 }
             }
 
@@ -148,6 +154,8 @@ namespace AutoLineWeight
                 var crv = make2DCurve.CurveGeometry.DuplicateCurve();
 
                 var attribs = new ObjectAttributes();
+                attribs.PlotColorSource = ObjectPlotColorSource.PlotColorFromObject;
+                attribs.ColorSource = ObjectColorSource.ColorFromObject;
 
                 // Processes visible curves
                 if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Visible)
@@ -165,6 +173,13 @@ namespace AutoLineWeight
                     // find source edge
                     ObjRef sourceSubObj = new ObjRef(doc, (Guid)source.Tag, ci);
                     BrepEdge sourceEdge = sourceSubObj.Edge();
+
+                    RhinoObject sourceObj = doc.Objects.Find((Guid)source.Tag);
+                    Color objColor = sourceObj.Attributes.DrawColor(doc);
+                    Color dispColor = sourceObj.Attributes.ComputedPlotColor(doc);
+
+                    attribs.ObjectColor = objColor;
+                    attribs.PlotColor = dispColor;
 
                     // initialize concavity of segment
                     Concavity crvMidConcavity = Concavity.None;
@@ -204,9 +219,17 @@ namespace AutoLineWeight
                 else if (crv != null && make2DCurve.SegmentVisibility == HiddenLineDrawingSegment.Visibility.Hidden)
                 {
                     if (includeHidden == false) { continue; }
+
+                    HiddenLineDrawingObject source = make2DCurve.ParentCurve.SourceObject;
+                    RhinoObject sourceObj = doc.Objects.Find((Guid)source.Tag);
+                    Color objColor = sourceObj.Attributes.DrawColor(doc);
+                    Color dispColor = sourceObj.Attributes.ComputedPlotColor(doc);
+                    attribs.ObjectColor = objColor;
+                    attribs.PlotColor = dispColor;
+
                     attribs.LayerIndex = hiddenIdx;
                 }
-
+                else { continue; }
                 // adds curves to document and selects them.
                 Guid crvGuid = doc.Objects.AddCurve(crv, attribs);
                 RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
