@@ -34,6 +34,7 @@ namespace AutoLineWeight
     {
         private RhinoViewport currentViewport;
         private ObjRef[] toMake2D;
+        private Curve[] intersects;
         private HiddenLineDrawing resultMake2D;
         private bool includeClipping;
         private bool includeHidden;
@@ -53,6 +54,16 @@ namespace AutoLineWeight
             this.includeHidden = includeHidden;
         }
 
+        public GenericMake2D(ObjRef[] objRefs, Curve[] intersects, RhinoViewport viewport, bool includeClipping, bool includeHidden)
+        {
+            Instance = this;
+            this.toMake2D = objRefs;
+            this.intersects = intersects;
+            this.currentViewport = viewport;
+            this.includeClipping = includeClipping;
+            this.includeHidden = includeHidden;
+        }
+
         ///<summary>The only instance of the MyCommand command.</summary>
         public static GenericMake2D Instance { get; private set; }
 
@@ -64,7 +75,7 @@ namespace AutoLineWeight
             make2DParams.SetViewport(this.currentViewport);
             make2DParams.IncludeHiddenCurves = true;
             make2DParams.IncludeTangentEdges = true;
-            make2DParams.Flatten = true;
+            make2DParams.Flatten = false;
             make2DParams.AbsoluteTolerance = RhinoDoc.ActiveDoc.ModelAbsoluteTolerance;
 
             if (this.currentViewport == null)
@@ -76,6 +87,13 @@ namespace AutoLineWeight
             {
                 RhinoObject obj = objRef?.Object();
                 if (obj != null) { make2DParams.AddGeometry(obj.Geometry, Transform.Identity, obj.Id); }
+            }
+
+            foreach (Curve crv in this.intersects)
+            {
+                Guid parentGuid;
+                crv.UserDictionary.TryGetGuid("parentObj1", out parentGuid);
+                make2DParams.AddGeometry(crv, Transform.Identity, parentGuid);
             }
 
             if (!this.includeHidden) { make2DParams.IncludeHiddenCurves = false; }

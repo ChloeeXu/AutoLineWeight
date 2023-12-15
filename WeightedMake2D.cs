@@ -70,13 +70,31 @@ namespace AutoLineWeight
             }
 
             Stopwatch watch = Stopwatch.StartNew();
-            GenericMake2D createMake2D = new GenericMake2D(objRefs, currentViewport, includeClipping, includeHidden);
+
+            CalculateBrepIntersects calcBrepInts = new CalculateBrepIntersects(objRefs);
+            Curve[] intersects = calcBrepInts.GetIntersects();
+
+            GenericMake2D createMake2D = new GenericMake2D(objRefs, intersects, currentViewport, includeClipping, includeHidden);
             HiddenLineDrawing make2D = createMake2D.GetMake2D();
-            
-            if (make2D == null)
-            {
-                return Result.Failure;
-            }
+
+            //ObjRef[] placeholder = { };
+            //GenericMake2D createIntersectionMake2D = new GenericMake2D(placeholder, intersects, currentViewport, includeClipping, includeHidden);
+            //HiddenLineDrawing intersectionMake2D = createIntersectionMake2D.GetMake2D();
+
+            //if (make2D == null || intersectionMake2D == null)
+            //{
+            //    return Result.Failure;
+            //}
+
+            //foreach (var make2DCurve in intersectionMake2D.Segments)
+            //{
+            //    Check for parent curve. Discard if not found.
+            //    if (make2DCurve?.ParentCurve == null || make2DCurve.ParentCurve.SilhouetteType == SilhouetteType.None)
+            //        continue;
+
+            //    var crv = make2DCurve.CurveGeometry.DuplicateCurve();
+            //    doc.Objects.Add(crv);
+            //}
 
             SortMake2D(doc, make2D, includeClipping, includeHidden);
             doc.Views.Redraw();

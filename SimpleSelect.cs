@@ -1,56 +1,29 @@
-﻿/*
-------------------------------
-
-This class accesses user-selected geometry. It accepts both
-preselected and postselected geometry, deselecting both after 
-processing. Invalid geometry remains selected.
-
-------------------------------
-created 11/30/2023
-Ennead Architects
-
-Chloe Xu
-chloe.xu@ennead.com
-edited:11/30/2023
-
-------------------------------
-*/
-
-
-using System;
-using System.Runtime.Remoting;
+﻿using System;
 using Rhino;
 using Rhino.Commands;
 using Rhino.DocObjects;
 using Rhino.Input.Custom;
 using Rhino.Input;
-using System.Diagnostics;
-using Rhino.UI;
 
 namespace AutoLineWeight
 {
-    public class UserSelectGeometry
+    public class SimpleSelect : Command
     {
-        // Storage location for selection.
-        Rhino.DocObjects.ObjRef[] userSelection;
-        bool includeClipping = true;
-        bool includeHidden = false;
+        string promptName;
+        ObjRef[] simpleSelection;
 
-        /// <summary>
-        /// Aqures user selection of multiple geometry. Accepts polysurfaces
-        /// and curves.
-        /// </summary>
-        public UserSelectGeometry ()
+        public SimpleSelect(string promptName)
         {
+            this.promptName = promptName;
             Instance = this;
         }
 
         ///<summary>The only instance of the MyCommand command.</summary>
-        public static UserSelectGeometry Instance { get; private set; }
+        public static SimpleSelect Instance { get; private set; }
 
-        public string EnglishName => "UserSelectGeometry";
+        public override string EnglishName => "SimpleSelect";
 
-        protected Result RunCommand(RhinoDoc doc, RunMode mode)
+        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
             // Initialize getobject
             GetObject getObject = new GetObject();
@@ -61,17 +34,11 @@ namespace AutoLineWeight
                 ObjectType.Brep |
                 ObjectType.Curve;
             getObject.SubObjectSelect = true;
-            getObject.SetCommandPrompt("Select geometry for the weighted make2d");
+            getObject.SetCommandPrompt("Select geometry for " + promptName);
             getObject.GroupSelect = true;
             getObject.EnableClearObjectsOnEntry(false);
             getObject.EnableUnselectObjectsOnExit(false);
             getObject.DeselectAllBeforePostSelect = false;
-
-            OptionToggle optIncludeClipping = new OptionToggle(includeClipping, "Disable", "Enable");
-            OptionToggle optIncludeHidden = new OptionToggle(includeHidden, "Disable", "Enable");
-
-            getObject.AddOptionToggle("Include_Clipping_Planes", ref optIncludeClipping);
-            getObject.AddOptionToggle("Include_Hidden_Lines", ref optIncludeHidden);
 
             bool hasPreselect = false;
 
@@ -81,20 +48,12 @@ namespace AutoLineWeight
             {
                 GetResult res = getObject.GetMultiple(1, 0); // This does not clear when called again?
 
-                // Case: User did not select an object
-                if (res == GetResult.Option)
-                {
-                    this.includeClipping = optIncludeClipping.CurrentValue;
-                    this.includeHidden = optIncludeHidden.CurrentValue;
-                    continue;
-                }
-
-                else if (res != GetResult.Object) 
+                if (res != GetResult.Object)
                 {
                     this.Deselect();
                     doc.Views.Redraw();
                     RhinoApp.WriteLine("No valid geometry was selected.");
-                    return Result.Cancel; 
+                    return Result.Cancel;
                 }
 
                 else if (getObject.ObjectsWerePreselected)
@@ -120,7 +79,7 @@ namespace AutoLineWeight
 
             RhinoApp.WriteLine("A total of {0} objects were selected.", getObject.ObjectCount);
 
-            userSelection = getObject.Objects();
+            simpleSelection = getObject.Objects();
 
             this.Deselect();
             doc.Views.Redraw();
@@ -128,27 +87,7 @@ namespace AutoLineWeight
             return Result.Success;
         }
 
-        /// <summary>
-        /// Requests and gets the selected geometry.
-        /// </summary>
-        /// <returns> An array of ObjRef </returns>
-        public Rhino.DocObjects.ObjRef[] GetUserSelection ()
-        {
-            this.RunCommand(RhinoDoc.ActiveDoc, RunMode.Interactive);
-            return this.userSelection;
-        }
-
-        public bool GetIncludeClipping ()
-        {
-            return this.includeClipping;
-        }
-
-        public bool GetIncludeHidden ()
-        {
-            return this.includeHidden;
-        }
-
-        private void Deselect() 
+        private void Deselect()
         {
             GetObject getRemaining = new GetObject();
             getRemaining.EnablePreSelect(true, false);
@@ -169,6 +108,12 @@ namespace AutoLineWeight
                     }
                 }
             }
+        }
+
+        public Rhino.DocObjects.ObjRef[] GetSimpleSelection()
+        {
+            this.RunCommand(RhinoDoc.ActiveDoc, RunMode.Interactive);
+            return this.simpleSelection;
         }
     }
 }
