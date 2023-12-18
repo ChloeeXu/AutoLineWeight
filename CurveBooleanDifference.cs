@@ -10,10 +10,12 @@ namespace AutoLineWeight
 {
     public class CurveBooleanDifference : Command
     {
+        // initialize curve selection
         Curve[] fromCurves;
         Curve[] withCurves;
 
         List<Curve> resultCurves = new List<Curve>();
+        List<Curve> overlaps = new List<Curve>();
 
         public CurveBooleanDifference(Curve[] fromCurves, Curve[] withCurves)
         {
@@ -43,6 +45,7 @@ namespace AutoLineWeight
                 Interval fromInterval = new Interval(startParam, endParam);
 
                 List<Interval> remainingIntervals = new List<Interval> { fromInterval };
+                List<Interval> overlapIntervals = new List<Interval>();
 
                 foreach (Curve withCurve in withCurves)
                 {
@@ -60,6 +63,7 @@ namespace AutoLineWeight
                         if (intersection.IsOverlap)
                         {
                             Interval overlap = intersection.OverlapA;
+                            overlapIntervals.Add(overlap);
                             remainingIntervals = IntervalDifference(remainingIntervals, overlap);
                         }
                     }
@@ -69,6 +73,14 @@ namespace AutoLineWeight
                 {
                     Curve trimmed = fromCurve.Trim(interval);
                     resultCurves.Add(trimmed);
+                }
+
+                List<Interval> cleanedOverlaps = MergeOverlappingIntervals(overlapIntervals);
+
+                foreach (Interval interval in cleanedOverlaps)
+                {
+                    Curve trimmed = fromCurve.Trim(interval);
+                    overlaps.Add(trimmed);
                 }
             }
             // TODO: complete command.
@@ -111,29 +123,48 @@ namespace AutoLineWeight
             return remaining;
         }
 
-        public Curve[] GetResultCurves()
+        public void CalculateOverlap()
         {
             RunCommand(RhinoDoc.ActiveDoc, RunMode.Interactive);
+        }
+
+        public Curve[] GetResultCurves()
+        {
             return this.resultCurves.ToArray();
         }
 
-        //public void Test ()
-        //{
-        //    Interval test1 = new Interval(1, 7);
-        //    Interval test2 = new Interval(3, 5);
-        //    Interval test3 = new Interval(1, 5);
-        //    Interval test4 = new Interval(2, 8);
-        //    Interval test5 = new Interval(7, 9);
-        //    Interval toRemove = new Interval(2, 6);
+        public Curve[] GetOverlapCurves()
+        {
+            return this.overlaps.ToArray();
+        }
 
-        //    List<Interval> testIntervals = new List<Interval>
-        //    {
-        //        test1, test2, test3, test4, test5
-        //    };
+        private List<Interval> MergeOverlappingIntervals(List<Interval> intervals)
+        {
+            if (intervals.Count <= 1)
+            {
+                return intervals;
+            }
 
-        //    List<Interval> testResults = IntervalDifference(testIntervals, toRemove);
+            intervals.Sort((x, y) => x.Min.CompareTo(y.Min));
 
-        //    RhinoApp.WriteLine(testResults.ToString());
-        //}
+            List<Interval> mergedIntervals = new List<Interval> { intervals[0] };
+
+            for (int i = 1; i < intervals.Count; i++)
+            {
+                Interval current = intervals[i];
+                Interval previous = mergedIntervals[mergedIntervals.Count - 1];
+
+                if (current.Min <= previous.Max)
+                {
+                    mergedIntervals[mergedIntervals.Count - 1] = new Interval(previous.Min, Math.Max(previous.Max, current.Max));
+                }
+                else
+                {
+                    mergedIntervals.Add(current);
+                }
+            }
+
+            return mergedIntervals;
+        }
     }
 }

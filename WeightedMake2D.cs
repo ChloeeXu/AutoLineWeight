@@ -71,32 +71,32 @@ namespace AutoLineWeight
 
             Stopwatch watch = Stopwatch.StartNew();
 
+            // calculate intersections between breps
             CalculateBrepIntersects calcBrepInts = new CalculateBrepIntersects(objRefs);
             Curve[] intersects = calcBrepInts.GetIntersects();
 
+            // compute hiddenlinedrawing object for all the selected objects and their intersects
             GenericMake2D createMake2D = new GenericMake2D(objRefs, intersects, currentViewport, includeClipping, includeHidden);
             HiddenLineDrawing make2D = createMake2D.GetMake2D();
 
-            //ObjRef[] placeholder = { };
-            //GenericMake2D createIntersectionMake2D = new GenericMake2D(placeholder, intersects, currentViewport, includeClipping, includeHidden);
-            //HiddenLineDrawing intersectionMake2D = createIntersectionMake2D.GetMake2D();
+            if (make2D == null)
+            {
+                return Result.Failure;
+            }
 
-            //if (make2D == null || intersectionMake2D == null)
-            //{
-            //    return Result.Failure;
-            //}
+            HiddenLineDrawing intersectionMake2D = null;
 
-            //foreach (var make2DCurve in intersectionMake2D.Segments)
-            //{
-            //    Check for parent curve. Discard if not found.
-            //    if (make2DCurve?.ParentCurve == null || make2DCurve.ParentCurve.SilhouetteType == SilhouetteType.None)
-            //        continue;
+            // if there are intersections between objects, compute a make2D specifically for these intersections
+            if (intersects.Length != 0) 
+            {
+                // generate this drawing only if there are intersects
+                GenericMake2D createIntersectionMake2D = new GenericMake2D(intersects, currentViewport, includeClipping, includeHidden);
+                intersectionMake2D = createIntersectionMake2D.GetMake2D();
 
-            //    var crv = make2DCurve.CurveGeometry.DuplicateCurve();
-            //    doc.Objects.Add(crv);
-            //}
+                if (intersectionMake2D == null) { return Result.Failure; }
+            }
 
-            SortMake2D(doc, make2D, includeClipping, includeHidden);
+            SortMake2D(doc, make2D, intersectionMake2D, includeClipping, includeHidden);
             doc.Views.Redraw();
 
             RhinoApp.WriteLine("WeightedMake2D was Successful!");
@@ -112,7 +112,7 @@ namespace AutoLineWeight
         /// between their source edges and their adjacent faces. Creates layers for the
         /// sorted curves if they don't already exist.
         /// </summary>
-        private Result SortMake2D (RhinoDoc doc, HiddenLineDrawing make2D, bool includeClipping, bool includeHidden)
+        private Result SortMake2D (RhinoDoc doc, HiddenLineDrawing make2D, HiddenLineDrawing intersection2D, bool includeClipping, bool includeHidden)
         {
             //Check existance of layers
             string[] level2Lyrs = { "WT_Cut", "WT_Outline", "WT_Convex", "WT_Concave" };
@@ -152,7 +152,6 @@ namespace AutoLineWeight
             }
 
             // finds the layer indexes only once per run.
-
             int clipIdx = 0;
             int hiddenIdx = 0;
             if (includeClipping == true) { clipIdx = doc.Layers.FindName("WT_Cut").Index; }
@@ -161,6 +160,30 @@ namespace AutoLineWeight
             int outlineIdx = doc.Layers.FindName("WT_Outline").Index;
             int convexIdx = doc.Layers.FindName("WT_Convex").Index;
             int concaveIdx = doc.Layers.FindName("WT_Concave").Index;
+
+            // generate intersection curves and calculate boudning box
+            List<Curve> intersectionSegments = new List<Curve>();
+            BoundingBox intersectionBB = new BoundingBox();
+            if (intersection2D != null)
+            {
+                foreach (var make2DCurve in intersection2D.Segments)
+                {
+                    //Check for parent curve. Discard if not found.
+                    if (make2DCurve?.ParentCurve == null || make2DCurve.ParentCurve.SilhouetteType == SilhouetteType.None)
+                        continue;
+
+                    var crv = make2DCurve.CurveGeometry.DuplicateCurve();
+                    intersectionSegments.Add(crv);
+                }
+                intersectionBB = intersection2D.BoundingBox(false);
+            }
+
+            var flatten = Transform.PlanarProjection(Plane.WorldXY);
+            BoundingBox page_box = make2D.BoundingBox(true);
+            var delta_2d = new Vector2d(0, 0);
+            delta_2d = delta_2d - new Vector2d(page_box.Min.X, page_box.Min.Y);
+            var delta_3d = Transform.Translation(new Vector3d(delta_2d.X, delta_2d.Y, 0.0));
+            flatten = delta_3d * flatten;
 
             // Sorts curves into layers
             foreach (var make2DCurve in make2D.Segments)
@@ -213,6 +236,7 @@ namespace AutoLineWeight
                     // silhouette type determines of the segment is an outline
                     SilhouetteType silType = make2DCurve.ParentCurve.SilhouetteType;
 
+                    attribs.SetUserString("Siltype", silType.ToString());
                     // sort segments into layers based on outline and concavity
                     attribs.SetUserString("SilType", silType.ToString());
                     if (silType == SilhouetteType.SectionCut)
@@ -220,13 +244,20 @@ namespace AutoLineWeight
                         if (includeClipping == false) { continue; }
                         attribs.LayerIndex = clipIdx;
                     }
-                    else if (silType == SilhouetteType.Boundary || silType == SilhouetteType.Crease)
+                    else if (silType == SilhouetteType.Boundary || 
+                        silType == SilhouetteType.Crease || 
+                        silType == SilhouetteType.Tangent || 
+                        silType == SilhouetteType.TangentProjects)
                     {
                         attribs.LayerIndex = outlineIdx;
+                        bool segmented = SegmentAndAddToDoc(doc, attribs, crv, intersectionSegments, intersectionBB, concaveIdx, flatten);
+                        if (segmented) { continue; }
                     }
                     else if (crvMidConcavity == Concavity.Convex)
                     {
                         attribs.LayerIndex = convexIdx;
+                        bool segmented = SegmentAndAddToDoc(doc, attribs, crv, intersectionSegments, intersectionBB, concaveIdx, flatten);
+                        if (segmented) { continue; }
                     }
                     else
                     {
@@ -249,12 +280,45 @@ namespace AutoLineWeight
                 }
                 else { continue; }
                 // adds curves to document and selects them.
+                crv.Transform(flatten);
                 Guid crvGuid = doc.Objects.AddCurve(crv, attribs);
                 RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
                 addedCrv.Select(true);
             }
 
             return Result.Success;
+        }
+
+        private bool SegmentAndAddToDoc (RhinoDoc doc, ObjectAttributes attribs, Curve crv, List<Curve> intersectionSegments, 
+            BoundingBox intersectionBB, int concaveIdx, Transform flatten)
+        {
+            if (intersectionSegments.Count == 0) { return false; }
+            if (BoundingBoxCoincides(crv.GetBoundingBox(false), intersectionBB) == false) { return false; }
+            Curve[] wrapperLst = { crv };
+            CurveBooleanDifference crvBD = new CurveBooleanDifference( wrapperLst, intersectionSegments.ToArray());
+            crvBD.CalculateOverlap();
+            Curve[] remaining = crvBD.GetResultCurves();
+            Curve[] overlap = crvBD.GetOverlapCurves();
+
+            foreach(Curve remainingCrv in remaining)
+            {
+                remainingCrv.Transform(flatten);
+                attribs.SetUserString("LayerIdx", attribs.LayerIndex.ToString());
+                Guid crvGuid = doc.Objects.AddCurve(remainingCrv, attribs);
+                RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
+                addedCrv.Select(true);
+            }
+            attribs.LayerIndex = concaveIdx;
+            foreach (Curve overlappingCrv in overlap)
+            {
+                overlappingCrv.Transform(flatten);
+                attribs.SetUserString("LayerIdx", attribs.LayerIndex.ToString());
+                Guid crvGuid = doc.Objects.AddCurve(overlappingCrv, attribs);
+                RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
+                addedCrv.Select(true);
+            }
+
+            return true;
         }
 
         private Layer FindOrCreateLyr (RhinoDoc doc, string lyrName, Layer parent, out bool exists)
@@ -274,5 +338,14 @@ namespace AutoLineWeight
             return layer;
         }
 
+        private bool BoundingBoxCoincides(BoundingBox bb1, BoundingBox bb2)
+        {
+            return bb1.Min.X <= bb2.Max.X &&
+                bb1.Max.X >= bb2.Min.X &&
+                bb1.Min.Y <= bb2.Max.Y &&
+                bb1.Max.Y >= bb2.Min.Y &&
+                bb1.Min.Z <= bb2.Max.Z &&
+                bb1.Max.Z >= bb2.Min.Z;
+        }
     }
 }

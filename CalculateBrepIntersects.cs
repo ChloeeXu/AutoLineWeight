@@ -74,35 +74,6 @@ namespace AutoLineWeight
                 bb1.Max.Z >= bb2.Min.Z;
         }
 
-        private List<Interval> MergeOverlappingIntervals(List<Interval> intervals)
-        {
-            if (intervals.Count <= 1)
-            {
-                return intervals;
-            }
-
-            intervals.Sort((x, y) => x.Min.CompareTo(y.Min));
-
-            List<Interval> mergedIntervals = new List<Interval> { intervals[0] };
-
-            for (int i = 1; i < intervals.Count; i++)
-            {
-                Interval current = intervals[i];
-                Interval previous = mergedIntervals[mergedIntervals.Count - 1];
-
-                if (current.Min <= previous.Max)
-                {
-                    mergedIntervals[mergedIntervals.Count - 1] = new Interval(previous.Min, Math.Max(previous.Max, current.Max));
-                }
-                else
-                {
-                    mergedIntervals.Add(current);
-                }
-            }
-
-            return mergedIntervals;
-        }
-
         public Curve[] GetIntersects()
         {
             this.RunCommand(RhinoDoc.ActiveDoc, RunMode.Interactive);
