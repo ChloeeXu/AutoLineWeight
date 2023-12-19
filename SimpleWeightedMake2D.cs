@@ -1,26 +1,4 @@
-﻿/*
-------------------------------
-
-This command creates a weighted 2D representation of user-selected 3D geometry.
-It weighs the 2D lines based on formal relationships between the source geometry
-edges and its adjacent faces. If an edge only has one adjacent face, or one of
-its two adjacent faces is hidden, it is defined as an "WT_Outline". If both faces are
-present and the line is on a convex corner, it is defined as "WT_Convex". All other
-visible lines are defined as "WT_Concave". Hidden lines are also processed. Results
-are baked onto layers according to their assigned weight.
-
-------------------------------
-created 11/28/2023
-Ennead Architects
-
-Chloe Xu
-chloe.xu@ennead.com
-edited:11/30/2023
-
-------------------------------
-*/
-
-using Rhino;
+﻿using Rhino;
 using Rhino.Commands;
 using Rhino.Display;
 using Rhino.DocObjects;
@@ -36,32 +14,23 @@ using System.Drawing;
 
 namespace AutoLineWeight
 {
-    public class WeightedMake2D : Command
+    public class SimpleWeightedMake2D : Command
     {
-        /// <summary>
-        /// creates a weighted 2D representation of user-selected 3D geometry based
-        /// on formal relationships between user-selected source geometry and its
-        /// adjacent faces.
-        /// </summary>
-
         ObjRef[] objRefs;
-        Curve[] intersects;
         RhinoViewport currentViewport;
 
         bool includeClipping = false;
         bool includeHidden = false;
 
-
-        public WeightedMake2D()
+        public SimpleWeightedMake2D()
         {
             Instance = this;
         }
 
-        ///<summary>The only instance of this command.</summary>
-        public static WeightedMake2D Instance { get; private set; }
+        ///<summary>The only instance of the MyCommand command.</summary>
+        public static SimpleWeightedMake2D Instance { get; private set; }
 
-        ///<returns>The command name as it appears on the Rhino command line.</returns>
-        public override string EnglishName => "WeightedMake2D";
+        public override string EnglishName => "SimpleWeightedMake2D";
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
@@ -79,35 +48,15 @@ namespace AutoLineWeight
             }
 
             Stopwatch watch0 = Stopwatch.StartNew();
-            Stopwatch watch1 = Stopwatch.StartNew();
-
-            // calculate intersections between breps
-            CalculateBrepIntersects calcBrepInts = new CalculateBrepIntersects(objRefs);
-            intersects = calcBrepInts.GetIntersects();
-
-            watch1.Stop();
-            RhinoApp.WriteLine("Calculating geometry intersects: " + watch1.ElapsedMilliseconds.ToString());
 
             Stopwatch watch2 = Stopwatch.StartNew();
             // compute hiddenlinedrawing object for all the selected objects and their intersects
-            GenericMake2D createMake2D = new GenericMake2D(objRefs, intersects, currentViewport, includeClipping, includeHidden);
+            GenericMake2D createMake2D = new GenericMake2D(objRefs, currentViewport, includeClipping, includeHidden);
             HiddenLineDrawing make2D = createMake2D.GetMake2D();
 
             if (make2D == null)
             {
                 return Result.Failure;
-            }
-
-            HiddenLineDrawing intersectionMake2D = null;
-
-            // if there are intersections between objects, compute a make2D specifically for these intersections
-            if (intersects.Length != 0) 
-            {
-                // generate this drawing only if there are intersects
-                GenericMake2D createIntersectionMake2D = new GenericMake2D(intersects, currentViewport, includeClipping, includeHidden);
-                intersectionMake2D = createIntersectionMake2D.GetMake2D();
-
-                if (intersectionMake2D == null) { return Result.Failure; }
             }
 
             watch2.Stop();
@@ -122,7 +71,7 @@ namespace AutoLineWeight
 
             Stopwatch watch4 = Stopwatch.StartNew();
 
-            SortMake2D(doc, make2D, intersectionMake2D);
+            SortMake2D(doc, make2D);
             doc.Views.Redraw();
 
             watch4.Stop();
@@ -135,13 +84,13 @@ namespace AutoLineWeight
 
             return Result.Success;
         }
-        
+
         /// <summary>
         /// Method used to sort HiddenLineDrawing curves based on the formal relationships 
         /// between their source edges and their adjacent faces. Creates layers for the
         /// sorted curves if they don't already exist.
         /// </summary>
-        private Result SortMake2D (RhinoDoc doc, HiddenLineDrawing make2D, HiddenLineDrawing intersection2D)
+        private Result SortMake2D(RhinoDoc doc, HiddenLineDrawing make2D)
         {
             // finds the layer indexes only once per run.
             int clipIdx = 0;
@@ -152,23 +101,6 @@ namespace AutoLineWeight
             int outlineIdx = doc.Layers.FindName("WT_Outline").Index;
             int convexIdx = doc.Layers.FindName("WT_Convex").Index;
             int concaveIdx = doc.Layers.FindName("WT_Concave").Index;
-
-            // generate intersection curves and calculate boudning box
-            List<Curve> intersectionSegments = new List<Curve>();
-            BoundingBox intersectionBB = new BoundingBox();
-            if (intersection2D != null)
-            {
-                foreach (var make2DCurve in intersection2D.Segments)
-                {
-                    //Check for parent curve. Discard if not found.
-                    if (make2DCurve?.ParentCurve == null || make2DCurve.ParentCurve.SilhouetteType == SilhouetteType.None)
-                        continue;
-
-                    var crv = make2DCurve.CurveGeometry.DuplicateCurve();
-                    intersectionSegments.Add(crv);
-                }
-                intersectionBB = intersection2D.BoundingBox(false);
-            }
 
             var flatten = Transform.PlanarProjection(Plane.WorldXY);
             BoundingBox page_box = make2D.BoundingBox(true);
@@ -236,20 +168,16 @@ namespace AutoLineWeight
                         if (includeClipping == false) { continue; }
                         attribs.LayerIndex = clipIdx;
                     }
-                    else if (silType == SilhouetteType.Boundary || 
-                        silType == SilhouetteType.Crease || 
-                        silType == SilhouetteType.Tangent || 
+                    else if (silType == SilhouetteType.Boundary ||
+                        silType == SilhouetteType.Crease ||
+                        silType == SilhouetteType.Tangent ||
                         silType == SilhouetteType.TangentProjects)
                     {
                         attribs.LayerIndex = outlineIdx;
-                        bool segmented = SegmentAndAddToDoc(doc, attribs, crv, intersectionSegments, intersectionBB, concaveIdx, flatten);
-                        if (segmented) { continue; }
                     }
                     else if (crvMidConcavity == Concavity.Convex)
                     {
                         attribs.LayerIndex = convexIdx;
-                        bool segmented = SegmentAndAddToDoc(doc, attribs, crv, intersectionSegments, intersectionBB, concaveIdx, flatten);
-                        if (segmented) { continue; }
                     }
                     else
                     {
@@ -281,38 +209,7 @@ namespace AutoLineWeight
             return Result.Success;
         }
 
-        private bool SegmentAndAddToDoc (RhinoDoc doc, ObjectAttributes attribs, Curve crv, List<Curve> intersectionSegments, 
-            BoundingBox intersectionBB, int concaveIdx, Transform flatten)
-        {
-            if (intersectionSegments.Count == 0) { return false; }
-            if (BoundingBoxCoincides(crv.GetBoundingBox(false), intersectionBB) == false) { return false; }
-            CurveBooleanDifference crvBD = new CurveBooleanDifference( crv, intersectionSegments.ToArray());
-            crvBD.CalculateOverlap();
-            Curve[] remaining = crvBD.GetResultCurves();
-            Curve[] overlap = crvBD.GetOverlapCurves();
-
-            foreach(Curve remainingCrv in remaining)
-            {
-                remainingCrv.Transform(flatten);
-                attribs.SetUserString("LayerIdx", attribs.LayerIndex.ToString());
-                Guid crvGuid = doc.Objects.AddCurve(remainingCrv, attribs);
-                RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
-                addedCrv.Select(true);
-            }
-            attribs.LayerIndex = concaveIdx;
-            foreach (Curve overlappingCrv in overlap)
-            {
-                overlappingCrv.Transform(flatten);
-                attribs.SetUserString("LayerIdx", attribs.LayerIndex.ToString());
-                Guid crvGuid = doc.Objects.AddCurve(overlappingCrv, attribs);
-                RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
-                addedCrv.Select(true);
-            }
-
-            return true;
-        }
-
-        private Layer FindOrCreateLyr (RhinoDoc doc, string lyrName, Layer parent, out bool exists)
+        private Layer FindOrCreateLyr(RhinoDoc doc, string lyrName, Layer parent, out bool exists)
         {
             Layer layer = doc.Layers.FindName(lyrName);
             if (layer == null)
@@ -325,7 +222,7 @@ namespace AutoLineWeight
                 layer = doc.Layers.FindName(lyrName);
             }
             else { exists = true; }
-            
+
             return layer;
         }
 
@@ -370,17 +267,6 @@ namespace AutoLineWeight
                     childLyr.PlotWeight = 0.15 * Math.Pow((numLyrs - i), 1.5);
                 }
             }
-        }
-
-        // Calculates whether two bounding boxes overlap (this is repeated in three classes, simplify?)
-        private bool BoundingBoxCoincides(BoundingBox bb1, BoundingBox bb2)
-        {
-            return bb1.Min.X <= bb2.Max.X &&
-                bb1.Max.X >= bb2.Min.X &&
-                bb1.Min.Y <= bb2.Max.Y &&
-                bb1.Max.Y >= bb2.Min.Y &&
-                bb1.Min.Z <= bb2.Max.Z &&
-                bb1.Max.Z >= bb2.Min.Z;
         }
     }
 }

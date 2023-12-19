@@ -11,15 +11,15 @@ namespace AutoLineWeight
     public class CurveBooleanDifference : Command
     {
         // initialize curve selection
-        Curve[] fromCurves;
+        Curve fromCurve;
         Curve[] withCurves;
 
         List<Curve> resultCurves = new List<Curve>();
         List<Curve> overlaps = new List<Curve>();
 
-        public CurveBooleanDifference(Curve[] fromCurves, Curve[] withCurves)
+        public CurveBooleanDifference(Curve fromCurve, Curve[] withCurves)
         {
-            this.fromCurves = fromCurves;
+            this.fromCurve = fromCurve;
             this.withCurves = withCurves;
             Instance = this;
         }
@@ -31,59 +31,55 @@ namespace AutoLineWeight
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
-            foreach (Curve fromCurve in fromCurves)
+            if (fromCurve == null) { return Result.Cancel; }
+
+            BoundingBox bb1 = fromCurve.GetBoundingBox(false);
+
+            double startParam;
+            fromCurve.LengthParameter(0, out startParam);
+            double endParam;
+            fromCurve.LengthParameter(fromCurve.GetLength(), out endParam);
+
+            Interval fromInterval = new Interval(startParam, endParam);
+
+            List<Interval> remainingIntervals = new List<Interval> { fromInterval };
+            List<Interval> overlapIntervals = new List<Interval>();
+
+            foreach (Curve withCurve in withCurves)
             {
-                if (fromCurve == null) { continue; }
+                if (withCurve == null) { continue; }
 
-                BoundingBox bb1 = fromCurve.GetBoundingBox(false);
+                BoundingBox bb2 = withCurve.GetBoundingBox(false);
+                if (!BoundingBoxCoincides(bb1, bb2)) { continue; }
 
-                double startParam;
-                fromCurve.LengthParameter(0, out startParam);
-                double endParam;
-                fromCurve.LengthParameter(fromCurve.GetLength(), out endParam);
+                double tol = doc.ModelAbsoluteTolerance;
+                CurveIntersections intersections = Intersection.CurveCurve(fromCurve, withCurve, tol, tol);
 
-                Interval fromInterval = new Interval(startParam, endParam);
-
-                List<Interval> remainingIntervals = new List<Interval> { fromInterval };
-                List<Interval> overlapIntervals = new List<Interval>();
-
-                foreach (Curve withCurve in withCurves)
+                for (int i = 0; i < intersections.Count; i++)
                 {
-                    if (withCurve == null) { continue; }
-
-                    BoundingBox bb2 = withCurve.GetBoundingBox(false);
-                    if (!BoundingBoxCoincides(bb1, bb2)) {  continue; }
-
-                    double tol = doc.ModelAbsoluteTolerance;
-                    CurveIntersections intersections = Intersection.CurveCurve(fromCurve, withCurve, tol, tol);
-
-                    for (int i = 0; i < intersections.Count; i++)
+                    IntersectionEvent intersection = intersections[i];
+                    if (intersection.IsOverlap)
                     {
-                        IntersectionEvent intersection = intersections[i];
-                        if (intersection.IsOverlap)
-                        {
-                            Interval overlap = intersection.OverlapA;
-                            overlapIntervals.Add(overlap);
-                            remainingIntervals = IntervalDifference(remainingIntervals, overlap);
-                        }
+                        Interval overlap = intersection.OverlapA;
+                        overlapIntervals.Add(overlap);
+                        remainingIntervals = IntervalDifference(remainingIntervals, overlap);
                     }
                 }
-
-                foreach (Interval interval in remainingIntervals)
-                {
-                    Curve trimmed = fromCurve.Trim(interval);
-                    resultCurves.Add(trimmed);
-                }
-
-                List<Interval> cleanedOverlaps = MergeOverlappingIntervals(overlapIntervals);
-
-                foreach (Interval interval in cleanedOverlaps)
-                {
-                    Curve trimmed = fromCurve.Trim(interval);
-                    overlaps.Add(trimmed);
-                }
             }
-            // TODO: complete command.
+
+            foreach (Interval interval in remainingIntervals)
+            {
+                Curve trimmed = fromCurve.Trim(interval);
+                resultCurves.Add(trimmed);
+            }
+
+            List<Interval> cleanedOverlaps = MergeOverlappingIntervals(overlapIntervals);
+
+            foreach (Interval interval in cleanedOverlaps)
+            {
+                Curve trimmed = fromCurve.Trim(interval);
+                overlaps.Add(trimmed);
+            }
             return Result.Success;
         }
 
