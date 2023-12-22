@@ -47,9 +47,11 @@ namespace AutoLineWeight
         ObjRef[] objRefs;
         Curve[] intersects;
         RhinoViewport currentViewport;
+        Transform flatten;
 
         bool includeClipping = false;
         bool includeHidden = false;
+        bool includeSilhouette = false;
 
 
         public WeightedMake2D()
@@ -72,6 +74,9 @@ namespace AutoLineWeight
             this.objRefs = selectObjs.GetUserSelection();
             this.includeClipping = selectObjs.GetIncludeClipping();
             this.includeHidden = selectObjs.GetIncludeHidden();
+            this.includeSilhouette = selectObjs.GetIndluceSceneSilhouette();
+
+            if (this.includeSilhouette) { this.includeClipping =  false; }
 
             if (objRefs == null)
             {
@@ -86,7 +91,7 @@ namespace AutoLineWeight
             intersects = calcBrepInts.GetIntersects();
 
             watch1.Stop();
-            RhinoApp.WriteLine("Calculating geometry intersects: " + watch1.ElapsedMilliseconds.ToString());
+            RhinoApp.WriteLine("Calculating geometry intersects {0} miliseconds.", watch1.ElapsedMilliseconds.ToString());
 
             Stopwatch watch2 = Stopwatch.StartNew();
             // compute hiddenlinedrawing object for all the selected objects and their intersects
@@ -111,14 +116,14 @@ namespace AutoLineWeight
             }
 
             watch2.Stop();
-            RhinoApp.WriteLine("Generating Make2D: " + watch2.ElapsedMilliseconds.ToString());
+            RhinoApp.WriteLine("Generating Make2D {0} miliseconds.", watch2.ElapsedMilliseconds.ToString());
 
             Stopwatch watch3 = Stopwatch.StartNew();
 
             GenerateLayers(doc);
 
             watch3.Stop();
-            RhinoApp.WriteLine("Generating Layers: " + watch3.ElapsedMilliseconds.ToString());
+            RhinoApp.WriteLine("Generating Layers {0} miliseconds.", watch3.ElapsedMilliseconds.ToString());
 
             Stopwatch watch4 = Stopwatch.StartNew();
 
@@ -126,7 +131,15 @@ namespace AutoLineWeight
             doc.Views.Redraw();
 
             watch4.Stop();
-            RhinoApp.WriteLine("Sorting Curves: " + watch4.ElapsedMilliseconds.ToString());
+            RhinoApp.WriteLine("Sorting Curves took {0} miliseconds.", watch4.ElapsedMilliseconds.ToString());
+
+            if (this.includeSilhouette)
+            {
+                Stopwatch watch5 = Stopwatch.StartNew();
+                OutlineMake2D(doc);
+                watch5.Stop();
+                RhinoApp.WriteLine("Generating Outline took {0} miliseconds.", watch5.ElapsedMilliseconds.ToString());
+            }
 
             RhinoApp.WriteLine("WeightedMake2D was Successful!");
             watch0.Stop();
@@ -170,7 +183,7 @@ namespace AutoLineWeight
                 intersectionBB = intersection2D.BoundingBox(false);
             }
 
-            var flatten = Transform.PlanarProjection(Plane.WorldXY);
+            flatten = Transform.PlanarProjection(Plane.WorldXY);
             BoundingBox page_box = make2D.BoundingBox(true);
             var delta_2d = new Vector2d(0, 0);
             delta_2d = delta_2d - new Vector2d(page_box.Min.X, page_box.Min.Y);
@@ -242,13 +255,13 @@ namespace AutoLineWeight
                         silType == SilhouetteType.TangentProjects)
                     {
                         attribs.LayerIndex = outlineIdx;
-                        bool segmented = SegmentAndAddToDoc(doc, attribs, crv, intersectionSegments, intersectionBB, concaveIdx, flatten);
+                        bool segmented = SegmentAndAddToDoc(doc, attribs, crv, intersectionSegments, intersectionBB, concaveIdx);
                         if (segmented) { continue; }
                     }
                     else if (crvMidConcavity == Concavity.Convex)
                     {
                         attribs.LayerIndex = convexIdx;
-                        bool segmented = SegmentAndAddToDoc(doc, attribs, crv, intersectionSegments, intersectionBB, concaveIdx, flatten);
+                        bool segmented = SegmentAndAddToDoc(doc, attribs, crv, intersectionSegments, intersectionBB, concaveIdx);
                         if (segmented) { continue; }
                     }
                     else
@@ -282,7 +295,7 @@ namespace AutoLineWeight
         }
 
         private bool SegmentAndAddToDoc (RhinoDoc doc, ObjectAttributes attribs, Curve crv, List<Curve> intersectionSegments, 
-            BoundingBox intersectionBB, int concaveIdx, Transform flatten)
+            BoundingBox intersectionBB, int concaveIdx)
         {
             if (intersectionSegments.Count == 0) { return false; }
             if (BoundingBoxCoincides(crv.GetBoundingBox(false), intersectionBB) == false) { return false; }
@@ -332,7 +345,7 @@ namespace AutoLineWeight
         private void GenerateLayers(RhinoDoc doc)
         {
             // Check existance of layers
-            string[] level2Lyrs = { "WT_Cut", "WT_Outline", "WT_Convex", "WT_Concave" };
+            string[] level2Lyrs = { "WT_Cut", "WT_Silhouette", "WT_Outline", "WT_Convex", "WT_Concave" };
 
             // Find the layers if they exist, create them if not
             bool exists;
@@ -361,6 +374,7 @@ namespace AutoLineWeight
             for (int i = 0; i < numLyrs; i++)
             {
                 if (i == 0 && includeClipping == false) { continue; }
+                if (i == 1 && includeSilhouette == false) { continue; }
                 String lyrName = level2Lyrs[i];
                 bool colored = false;
                 Layer childLyr = FindOrCreateLyr(doc, lyrName, visibleLayer, out colored);
@@ -369,6 +383,32 @@ namespace AutoLineWeight
                 {
                     childLyr.PlotWeight = 0.15 * Math.Pow((numLyrs - i), 1.5);
                 }
+            }
+        }
+
+        private void OutlineMake2D(RhinoDoc doc)
+        {
+            MeshOutline outliner = new MeshOutline(objRefs, currentViewport);
+            PolylineCurve[] outlines = outliner.GetOutlines();
+            GenericMake2D outline2DMaker = new GenericMake2D(outlines, currentViewport, includeClipping, includeHidden);
+            HiddenLineDrawing outline2D = outline2DMaker.GetMake2D();
+
+            foreach (var make2DCurve in outline2D.Segments)
+            {
+                // Check for parent curve. Discard if not found.
+                if (make2DCurve?.ParentCurve == null || make2DCurve.ParentCurve.SilhouetteType == SilhouetteType.None)
+                    continue;
+
+                var crv = make2DCurve.CurveGeometry.DuplicateCurve();
+
+                var attribs = new ObjectAttributes();
+                attribs.PlotColorSource = ObjectPlotColorSource.PlotColorFromObject;
+                attribs.ColorSource = ObjectColorSource.ColorFromObject;
+                attribs.LayerIndex = doc.Layers.FindName("WT_Silhouette").Index;
+
+                Guid crvGuid = doc.Objects.Add(crv, attribs);
+                RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
+                addedCrv.Select(true);
             }
         }
 

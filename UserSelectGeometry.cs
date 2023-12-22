@@ -33,8 +33,9 @@ namespace AutoLineWeight
     {
         // Storage location for selection.
         Rhino.DocObjects.ObjRef[] userSelection;
-        bool includeClipping = true;
+        bool includeClipping = false;
         bool includeHidden = false;
+        bool includeSceneSilhouette = true;
 
         /// <summary>
         /// Aqures user selection of multiple geometry. Accepts polysurfaces
@@ -69,11 +70,17 @@ namespace AutoLineWeight
 
             OptionToggle optIncludeClipping = new OptionToggle(includeClipping, "Disable", "Enable");
             OptionToggle optIncludeHidden = new OptionToggle(includeHidden, "Disable", "Enable");
+            OptionToggle optSceneSilhouette = new OptionToggle(includeSceneSilhouette, "Disable", "Enable");
 
             getObject.AddOptionToggle("Include_Clipping_Planes", ref optIncludeClipping);
             getObject.AddOptionToggle("Include_Hidden_Lines", ref optIncludeHidden);
+            getObject.AddOptionToggle("Include_Scene_Silhouette", ref optSceneSilhouette);
 
             bool hasPreselect = false;
+
+            RhinoApp.WriteLine("Warning: for the current build, including clipping planes " +
+                "and generating silhouettes are mutually exclusive. If both are enabled, scene silhouettes" +
+                "will be prioritized. Please process these separately.");
 
             // For loop runs once when there are no preselected geometry, twice when there is
             // Ensures that both preselection and postselection
@@ -86,6 +93,7 @@ namespace AutoLineWeight
                 {
                     this.includeClipping = optIncludeClipping.CurrentValue;
                     this.includeHidden = optIncludeHidden.CurrentValue;
+                    this.includeSceneSilhouette = optSceneSilhouette.CurrentValue;
                     continue;
                 }
 
@@ -146,6 +154,11 @@ namespace AutoLineWeight
         public bool GetIncludeHidden ()
         {
             return this.includeHidden;
+        }
+
+        public bool GetIndluceSceneSilhouette()
+        {
+            return this.includeSceneSilhouette;
         }
 
         private void Deselect() 

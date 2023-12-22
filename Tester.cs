@@ -20,35 +20,49 @@ namespace AutoLineWeight
 
         protected override Result RunCommand(RhinoDoc doc, RunMode mode)
         {
-            TestCurveBooleanDifference(doc, mode);
+            TestMeshOutline(doc, mode);
             return Result.Success;
         }
 
-        private Result TestCurveBooleanDifference (RhinoDoc doc, RunMode mode)
+        //private Result TestCurveBooleanDifference (RhinoDoc doc, RunMode mode)
+        //{
+        //    SimpleSelect selecter1 = new SimpleSelect("tester to difference from.");
+        //    SimpleSelect selecter2 = new SimpleSelect("tester to difference with.");
+        //    Rhino.DocObjects.ObjRef[] selection1 = selecter1.GetSimpleSelection();
+        //    Rhino.DocObjects.ObjRef[] selection2 = selecter2.GetSimpleSelection();
+        //    Curve[] crvsel1 = new Curve[selection1.Length];
+        //    Curve[] crvsel2 = new Curve[selection2.Length];
+        //    for (int i = 0; i < selection1.Length; i++)
+        //    {
+        //        crvsel1[i] = selection1[i].Curve().DuplicateCurve();
+        //    }
+        //    for (int i = 0; i < selection2.Length; i++)
+        //    {
+        //        crvsel2[i] = selection2[i].Curve().DuplicateCurve();
+        //    }
+
+        //    CurveBooleanDifference testdiff = new CurveBooleanDifference(crvsel1, crvsel2);
+        //    Curve[] results = testdiff.GetResultCurves();
+
+        //    foreach (Curve crv in results)
+        //    {
+        //        doc.Objects.Add(crv);
+        //    }
+
+        //    return Result.Success;
+        //}
+
+        private Result TestMeshOutline (RhinoDoc doc, RunMode mode)
         {
-            SimpleSelect selecter1 = new SimpleSelect("tester to difference from.");
-            SimpleSelect selecter2 = new SimpleSelect("tester to difference with.");
-            Rhino.DocObjects.ObjRef[] selection1 = selecter1.GetSimpleSelection();
-            Rhino.DocObjects.ObjRef[] selection2 = selecter2.GetSimpleSelection();
-            Curve[] crvsel1 = new Curve[selection1.Length];
-            Curve[] crvsel2 = new Curve[selection2.Length];
-            for (int i = 0; i < selection1.Length; i++)
+            Rhino.Display.RhinoViewport currentViewport = doc.Views.ActiveView.ActiveViewport;
+            SimpleSelect selecter = new SimpleSelect("tester to make outline with.");
+            Rhino.DocObjects.ObjRef[] selection = selecter.GetSimpleSelection();
+            MeshOutline outliner = new MeshOutline(selection, currentViewport);
+            PolylineCurve[] outputs = outliner.GetOutlines();
+            foreach (PolylineCurve crv in outputs)
             {
-                crvsel1[i] = selection1[i].Curve().DuplicateCurve();
+                doc.Objects.AddCurve(crv);
             }
-            for (int i = 0; i < selection2.Length; i++)
-            {
-                crvsel2[i] = selection2[i].Curve().DuplicateCurve();
-            }
-
-            CurveBooleanDifference testdiff = new CurveBooleanDifference(crvsel1, crvsel2);
-            Curve[] results = testdiff.GetResultCurves();
-
-            foreach (Curve crv in results)
-            {
-                doc.Objects.Add(crv);
-            }
-
             return Result.Success;
         }
     }
