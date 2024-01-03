@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Rhino;
 using Rhino.Commands;
@@ -75,8 +76,13 @@ namespace AutoLineWeight
 
             Mesh[] addMeshes = new Mesh[objCount - 1];
             Array.Copy(inMeshes, 1, addMeshes, 0, objCount - 1);
+            addMeshes = addMeshes.Where(mesh => mesh != null).ToArray();
 
-            baseMesh.Append(addMeshes);
+            if (addMeshes != null && addMeshes.Length != 0)
+            {
+                baseMesh.Append(addMeshes);
+            }
+
             Polyline[] basePLine = baseMesh.GetOutlines(vp);
             if (basePLine != null)
             {

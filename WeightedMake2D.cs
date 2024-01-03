@@ -48,8 +48,6 @@ namespace AutoLineWeight
         Curve[] intersects;
         RhinoViewport currentViewport;
         Transform flatten;
-        Transform move2D;
-        Transform moveSilhouette;
 
         bool includeClipping = false;
         bool includeHidden = false;
@@ -185,17 +183,18 @@ namespace AutoLineWeight
                 intersectionBB = intersection2D.BoundingBox(false);
             }
 
-            flatten = Transform.PlanarProjection(Plane.WorldXY);
+            this.flatten = Transform.PlanarProjection(Plane.WorldXY);
             BoundingBox page_box = make2D.BoundingBox(true);
-            var delta_2d = new Vector2d(0, 0);
-            delta_2d = delta_2d - new Vector2d(page_box.Min.X, page_box.Min.Y);
-            var delta_3d = Transform.Translation(new Vector3d(delta_2d.X, delta_2d.Y, 0.0));
-            flatten = delta_3d * flatten;
+            //var delta_2d = new Vector2d(0, 0);
+            //delta_2d = delta_2d - new Vector2d(page_box.Min.X, page_box.Min.Y);
+            //var delta_3d = Transform.Translation(new Vector3d(delta_2d.X, delta_2d.Y, 0.0));
 
             Point3d center = page_box.Center;
             Vector3d moveVector = new Vector3d(center);
             moveVector.Reverse();
-            this.move2D = Transform.Translation(moveVector);
+            moveVector.Z = 0;
+            Transform move2D = Transform.Translation(moveVector);
+            this.flatten = move2D * flatten;
 
             // Sorts curves into layers
             foreach (var make2DCurve in make2D.Segments)
@@ -405,12 +404,6 @@ namespace AutoLineWeight
                 return;
             }
 
-            BoundingBox silhouetteBB = outline2D.BoundingBox(false);
-            Point3d center = silhouetteBB.Center;
-            Vector3d moveVector = new Vector3d(center);
-            moveVector.Reverse();
-            this.moveSilhouette = Transform.Translation(moveVector);
-
             foreach (var make2DCurve in outline2D.Segments)
             {
                 // Check for parent curve. Discard if not found.
@@ -424,7 +417,8 @@ namespace AutoLineWeight
                 attribs.ColorSource = ObjectColorSource.ColorFromObject;
                 attribs.LayerIndex = doc.Layers.FindName("WT_Silhouette").Index;
 
-                crv.Transform(moveSilhouette);
+                crv.Transform(flatten);
+
 
                 Guid crvGuid = doc.Objects.Add(crv, attribs);
                 RhinoObject addedCrv = doc.Objects.FindId(crvGuid);
