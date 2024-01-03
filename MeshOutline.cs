@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
 using Rhino;
 using Rhino.Commands;
 using Rhino.Display;
@@ -10,7 +9,7 @@ using Rhino.Geometry;
 
 namespace AutoLineWeight
 {
-    public class MeshOutline : Command
+    public class MeshOutline
     {
         ObjRef[] outlineObjs;
         RhinoViewport vp;
@@ -27,9 +26,9 @@ namespace AutoLineWeight
         ///<summary>The only instance of the MyCommand command.</summary>
         public static MeshOutline Instance { get; private set; }
 
-        public override string EnglishName => "MeshOutline";
+        public string EnglishName => "MeshOutline";
 
-        protected override Result RunCommand(RhinoDoc doc, RunMode mode)
+        protected Result RunCommand(RhinoDoc doc, RunMode mode)
         {
             int objCount = this.outlineObjs.Length;
             Mesh[] inMeshes = new Mesh[objCount];

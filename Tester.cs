@@ -55,8 +55,8 @@ namespace AutoLineWeight
         private Result TestMeshOutline (RhinoDoc doc, RunMode mode)
         {
             Rhino.Display.RhinoViewport currentViewport = doc.Views.ActiveView.ActiveViewport;
-            SimpleSelect selecter = new SimpleSelect("tester to make outline with.");
-            Rhino.DocObjects.ObjRef[] selection = selecter.GetSimpleSelection();
+            SimpleSelector selecter = new SimpleSelector();
+            Rhino.DocObjects.ObjRef[] selection = selecter.GetSelection();
             MeshOutline outliner = new MeshOutline(selection, currentViewport);
             PolylineCurve[] outputs = outliner.GetOutlines();
             foreach (PolylineCurve crv in outputs)

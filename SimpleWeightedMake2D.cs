@@ -37,8 +37,8 @@ namespace AutoLineWeight
             // Aquires current viewport
             currentViewport = RhinoDoc.ActiveDoc.Views.ActiveView.ActiveViewport;
 
-            UserSelectGeometry selectObjs = new UserSelectGeometry();
-            this.objRefs = selectObjs.GetUserSelection();
+            WMSelector selectObjs = new WMSelector();
+            this.objRefs = selectObjs.GetSelection();
             this.includeClipping = selectObjs.GetIncludeClipping();
             this.includeHidden = selectObjs.GetIncludeHidden();
 

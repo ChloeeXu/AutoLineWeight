@@ -45,7 +45,7 @@ namespace AutoLineWeight
                     BoundingBox bb1 = obj1.Object().Geometry.GetBoundingBox(false);
                     BoundingBox bb2 = obj2.Object().Geometry.GetBoundingBox(false);
 
-                    if (!BoundingBoxCoincides(bb1, bb2)) {  continue; }
+                    if (!BoundingBoxOperations.BoundingBoxCoincides(bb1, bb2)) {  continue; }
 
                     Point3d[] ptIntersect;
                     Curve[] crvIntersect;
@@ -62,16 +62,6 @@ namespace AutoLineWeight
                 }
             }
             return Result.Success;
-        }
-
-        private bool BoundingBoxCoincides(BoundingBox bb1, BoundingBox bb2)
-        {
-            return bb1.Min.X <= bb2.Max.X &&
-                bb1.Max.X >= bb2.Min.X &&
-                bb1.Min.Y <= bb2.Max.Y &&
-                bb1.Max.Y >= bb2.Min.Y &&
-                bb1.Min.Z <= bb2.Max.Z &&
-                bb1.Max.Z >= bb2.Min.Z;
         }
 
         public Curve[] GetIntersects()
