@@ -1,29 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Runtime.Remoting;
-using Rhino;
+﻿using Rhino;
 using Rhino.Commands;
-using Rhino.DocObjects;
-using Rhino.DocObjects.Custom;
 using Rhino.Geometry;
 using Rhino.Geometry.Intersect;
+using System.Collections.Generic;
 
 namespace AutoLineWeight
 {
-    public class CalculateBrepIntersects : Command
+    public class BrepIntersects : Command
     {
         Rhino.DocObjects.ObjRef[] objSel;
         List<Curve> intersects = new List<Curve>();
-        public CalculateBrepIntersects(Rhino.DocObjects.ObjRef[] sourceObjSel)
+        public BrepIntersects(Rhino.DocObjects.ObjRef[] sourceObjSel)
         {
             Instance = this;
             this.objSel = sourceObjSel;
         }
 
         ///<summary>The only instance of the MyCommand command.</summary>
-        public static CalculateBrepIntersects Instance { get; private set; }
+        public static BrepIntersects Instance { get; private set; }
 
         public override string EnglishName => "CalculateBrepIntersects";
 
@@ -45,7 +39,7 @@ namespace AutoLineWeight
                     BoundingBox bb1 = obj1.Object().Geometry.GetBoundingBox(false);
                     BoundingBox bb2 = obj2.Object().Geometry.GetBoundingBox(false);
 
-                    if (!BoundingBoxOperations.BoundingBoxCoincides(bb1, bb2)) {  continue; }
+                    if (!BoundingBoxOperations.BoundingBoxCoincides(bb1, bb2)) { continue; }
 
                     Point3d[] ptIntersect;
                     Curve[] crvIntersect;

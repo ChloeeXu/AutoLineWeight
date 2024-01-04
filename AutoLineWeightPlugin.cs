@@ -1,7 +1,4 @@
-﻿using Rhino;
-using System;
-
-namespace AutoLineWeight
+﻿namespace AutoLineWeight
 {
     ///<summary>
     /// <para>Every RhinoCommon .rhp assembly must have one and only one PlugIn-derived

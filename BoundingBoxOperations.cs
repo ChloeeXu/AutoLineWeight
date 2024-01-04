@@ -1,7 +1,4 @@
-﻿using System;
-using Rhino;
-using Rhino.Commands;
-using Rhino.Geometry;
+﻿using Rhino.Geometry;
 
 namespace AutoLineWeight
 {
@@ -41,8 +38,7 @@ namespace AutoLineWeight
         public static Vector3d VectorLeftBottomOrigin(BoundingBox bb)
         {
             Vector3d vec = new Vector3d(PointLeftBot(bb));
-            vec.Reverse();
-            return vec;
+            return -vec;
         }
     }
 }

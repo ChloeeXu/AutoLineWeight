@@ -1,11 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Rhino;
+﻿using Rhino;
 using Rhino.Commands;
 using Rhino.Display;
 using Rhino.DocObjects;
 using Rhino.Geometry;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace AutoLineWeight
 {
@@ -37,7 +37,7 @@ namespace AutoLineWeight
             int objIter = 0;
 
             // tried to write this to be more optimized with an array instead of a list...
-            for (int i = 0; i < objCount; i++ )
+            for (int i = 0; i < objCount; i++)
             {
                 ObjRef objRef = this.outlineObjs[i];
                 Mesh mesh = objRef.Mesh();
@@ -58,8 +58,8 @@ namespace AutoLineWeight
                 ObjRef[] meshRefs = RhinoObject.GetRenderMeshes(inObjects, true, false);
                 if (meshRefs != null)
                 {
-                    for (int i = 0; i < meshRefs.Length; i++) 
-                    { 
+                    for (int i = 0; i < meshRefs.Length; i++)
+                    {
                         Mesh mesh = meshRefs[i].Mesh();
                         if (mesh != null)
                         {

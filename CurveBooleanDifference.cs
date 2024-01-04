@@ -1,9 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using Rhino;
+﻿using Rhino;
 using Rhino.Commands;
 using Rhino.Geometry;
 using Rhino.Geometry.Intersect;
+using System;
+using System.Collections.Generic;
 
 namespace AutoLineWeight
 {
@@ -90,7 +90,7 @@ namespace AutoLineWeight
         private List<Interval> IntervalDifference(List<Interval> intervals, Interval toRemove)
         {
             List<Interval> remaining = new List<Interval>();
-            for(int i = 0; i < intervals.Count; i++)
+            for (int i = 0; i < intervals.Count; i++)
             {
                 Interval interval = intervals[i];
                 interval.MakeIncreasing();

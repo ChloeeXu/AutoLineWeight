@@ -1,8 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using Rhino;
-using Rhino.Commands;
+﻿using Rhino;
 using Rhino.DocObjects;
+using System;
+using System.Collections.Generic;
 
 namespace AutoLineWeight
 {
@@ -48,7 +47,7 @@ namespace AutoLineWeight
                 doc.Layers.Add(layer);
                 layer = doc.Layers.FindName(lyrName);
             }
-            else 
+            else
             {
                 try { preexisting.Add(lyrName, true); }
                 catch { } // do nothing if preexisting already contains lyrName
@@ -60,7 +59,7 @@ namespace AutoLineWeight
 
         public void Add(string[] lyrName, string parent)
         {
-            foreach(string lyr in lyrName) { Add(lyr, parent); }
+            foreach (string lyr in lyrName) { Add(lyr, parent); }
         }
 
         /// <summary>
@@ -143,7 +142,9 @@ namespace AutoLineWeight
             try { idx = layerIdxs[lyrName]; }
             catch
             {
-                idx = doc.Layers.FindName(lyrName).Index;
+                Layer lyr = doc.Layers.FindName(lyrName);
+                if (lyr == null) { idx = -1; }
+                else { idx = lyr.Index; }
             }
             return idx;
         }

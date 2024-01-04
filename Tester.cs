@@ -1,6 +1,4 @@
-﻿using System;
-using System.Runtime.Remoting;
-using Rhino;
+﻿using Rhino;
 using Rhino.Commands;
 using Rhino.Geometry;
 
@@ -52,7 +50,7 @@ namespace AutoLineWeight
         //    return Result.Success;
         //}
 
-        private Result TestMeshOutline (RhinoDoc doc, RunMode mode)
+        private Result TestMeshOutline(RhinoDoc doc, RunMode mode)
         {
             Rhino.Display.RhinoViewport currentViewport = doc.Views.ActiveView.ActiveViewport;
             SimpleSelector selecter = new SimpleSelector();

@@ -17,16 +17,12 @@ edited:11/30/2023
 ------------------------------
 */
 
-using System;
-using System.Collections.Generic;
 using Rhino;
 using Rhino.Commands;
 using Rhino.Display;
 using Rhino.DocObjects;
 using Rhino.Geometry;
-using Rhino.Input;
-using Rhino.Input.Custom;
-using Rhino.UI;
+using System;
 
 namespace AutoLineWeight
 {
